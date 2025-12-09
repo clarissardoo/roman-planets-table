@@ -221,7 +221,7 @@ def main():
                         help='Planet to compute separations for')
 
     parser.add_argument('--start-date',type=str,default=None,
-                        help='Start date in YYYY-MM-DD format (default: 2026-06-01)')
+                        help='Start date in YYYY-MM-DD format (default: 2027-01-01)')
 
     parser.add_argument('--end-date',type=str,default=None,
                         help='End date in YYYY-MM-DD format (default: 2031-06-01)')
@@ -247,7 +247,6 @@ def main():
     print("="*60)
     print("Planet Separation CSV Generator")
     print("="*60)
-    print()
 
     # Planet selection
     if args.planet is None:
@@ -275,23 +274,23 @@ def main():
                 else:
                     print(f"Invalid planet name. Please try again.")
 
+
+    # DATES
     # Start date
     if args.start_date is None:
-        args.start_date=input("Start date [2026-06-01]: ").strip() or "2026-06-01"
-
+        args.start_date=input("Start date [2027-01-01]: ").strip() or "2027-01-01"
     # End date
     if args.end_date is None:
         args.end_date=input("End date [2031-06-01]: ").strip() or "2031-06-01"
-
     # Time interval
     if args.time_interval is None:
         time_interval_input=input("Time interval in days [30]: ").strip()
         args.time_interval=int(time_interval_input) if time_interval_input else 30
 
+    #Orbit Posteriors
     # Inclination
     if args.inclination is None:
         args.inclination=input("Inclination in degrees or 'random' [random]: ").strip() or "random"
-
     # Number of samples
     if args.nsamp is None:
         nsamp_input=input("Number of posterior samples (or 'all') [all]: ").strip()
@@ -310,11 +309,10 @@ def main():
                 print(f"Error: nsamp must be a number or 'all'")
                 return
 
-    # Load posterior data first to check size if "all" is requested
+    # check posterior size if "all" is requested
     base_path=Path(args.posterior_dir)
     planet_dir=base_path/args.planet
     files=list(planet_dir.glob("*.csv.bz2"))
-
     if not files:
         print(f"Error: No posterior data found for {args.planet} in {planet_dir}")
         return
@@ -322,8 +320,6 @@ def main():
     print(f"Loading posterior data from {files[0]}...")
     df=pd.read_csv(files[0])
     params=orbit_params[args.planet]
-
-    # Handle "all" option for nsamp
     if args.nsamp=='all':
         args.nsamp=len(df)
         print(f"Using all {args.nsamp} posterior samples")
@@ -339,10 +335,10 @@ def main():
     print("-"*60)
     print()
 
-    # Parse inclination (LAN is always random since we only care about projected separation)
+    # Parse inc
     try:
         override_inc=None if args.inclination.lower()=='random' else float(args.inclination)
-        override_lan=None  # Always random - we only care about projected separation
+        override_lan=None  # Always random
     except ValueError:
         print(f"Error: Invalid inclination value")
         return
@@ -354,7 +350,6 @@ def main():
     except:
         print("Error: Invalid date format. Use YYYY-MM-DD (e.g., 2026-06-01)")
         return
-
     if t_end<=t_start:
         print("Error: End date must be after start date")
         return
@@ -389,7 +384,7 @@ def main():
     # Convert inclination from radians to degrees
     inc_deg=np.degrees(inc)
 
-    # Print mass and inclination statistics
+    # mass and inclination statistics
     mass_median=np.median(m_pl_mjup)
     mass_16th=np.percentile(m_pl_mjup,16)
     mass_84th=np.percentile(m_pl_mjup,84)
@@ -404,16 +399,14 @@ def main():
     print(f"Inclination: {inc_median:.2f} [{inc_16th:.2f}, {inc_84th:.2f}] degrees")
     print()
 
-    # Get log-likelihoods for weighting
+    # Get lnlike for weighting the posteriors
     myBasis=Basis(params["basis"],params["n_planets"])
     df_synth=myBasis.to_synth(df_sample)
     lnlike=df_synth["lnprobability"].values
 
-    # Convert log-likelihood to weights
+    # Convert lnlike to weights
     weights=np.exp(lnlike-np.max(lnlike))
     weights=weights/np.sum(weights)
-
-    print("Computing weighted statistics...")
 
     # Compute weighted statistics
     med_sep=weighted_percentile(seps,weights,50)
@@ -423,12 +416,8 @@ def main():
     high_sep_95=weighted_percentile(seps,weights,97.5)
 
     # Convert angular separation (mas) to physical separation (AU)
-    # Using: distance (pc) = 1000 / parallax (mas)
-    # and: separation (AU) = separation (mas) * distance (pc) / 1000
-    # which simplifies to: separation (AU) = separation (mas) / parallax (mas)
-    distance_pc=1000.0/params["plx"]  # distance in parsecs
 
-    # Convert all separation measurements to AU
+    distance_pc=1000.0/params["plx"]
     med_rad_au=med_sep*distance_pc/1000.0  # convert mas*pc to AU
     low_rad_au=low_sep*distance_pc/1000.0
     high_rad_au=high_sep*distance_pc/1000.0
@@ -452,14 +441,14 @@ def main():
         'separation_au_97.5th':high_rad_au_95,
     })
 
-    # Generate output filename
+    # output file name
     if args.output is None:
         planet_name=args.planet.replace("_","")
         output_file=f"{planet_name}_separations_{args.start_date}_to_{args.end_date}.csv"
     else:
         output_file=args.output
 
-    # Write CSV with metadata
+    #write csv
     print(f"Writing output to {output_file}...")
     with open(output_file,'w') as f:
         f.write(f"# Planet: {display_names[args.planet]}\n")
