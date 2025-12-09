@@ -1,0 +1,8 @@
+Flask==3.0.0
+numpy
+pandas
+astropy
+radvel
+orbitize
+plotly
+gunicorn
