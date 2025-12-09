@@ -13,10 +13,10 @@ This tool computes sky projected angular separations for RV detected exoplanets 
 ## Usage
 
 ```bash
-python roman-table.py \
-    --planet HD_154345 \
-    --start-date 2027-01-01 \
-    --end-date 2031-06-01 \
-    --time-interval 30 \
-    --inclination random \
+python roman-table.py 
+    --planet HD_154345 
+    --start-date 2027-01-01 
+    --end-date 2031-06-01 
+    --time-interval 30 
+    --inclination random 
     --nsamp all
