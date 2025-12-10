@@ -224,10 +224,10 @@ def main():
                         help='Start date in YYYY-MM-DD format (default: 2027-01-01)')
 
     parser.add_argument('--end-date',type=str,default=None,
-                        help='End date in YYYY-MM-DD format (default: 2031-06-01)')
+                        help='End date in YYYY-MM-DD format (default: 2027-06-01)')
 
     parser.add_argument('--time-interval',type=int,default=None,
-                        help='Time interval in days (default: 30)')
+                        help='Time interval in days (default: 1)')
 
     parser.add_argument('--inclination',type=str,default=None,
                         help='Orbital inclination in degrees or "random" (default: random)')
@@ -274,18 +274,18 @@ def main():
                 else:
                     print(f"Invalid planet name. Please try again.")
 
-
     # DATES
     # Start date
     if args.start_date is None:
         args.start_date=input("Start date [2027-01-01]: ").strip() or "2027-01-01"
     # End date
     if args.end_date is None:
-        args.end_date=input("End date [2031-06-01]: ").strip() or "2031-06-01"
+        args.end_date=input("End date [2027-06-01]: ").strip() or "2027-06-01"
     # Time interval
     if args.time_interval is None:
-        time_interval_input=input("Time interval in days [30]: ").strip()
-        args.time_interval=int(time_interval_input) if time_interval_input else 30
+        time_interval_input=input("Time interval in days [1]: ").strip()
+        args.time_interval=int(time_interval_input) if time_interval_input else 1
+        args.time_interval=int(time_interval_input) if time_interval_input else 1
 
     #Orbit Posteriors
     # Inclination
@@ -381,6 +381,21 @@ def main():
     # Convert planet mass from solar masses to Jupiter masses
     m_pl_mjup=m_pl*(u.M_sun/u.M_jup).to('')
 
+    # Convert mass to Earth masses for radius calculation
+    m_pl_mearth=m_pl*(u.M_sun/u.M_earth).to('')
+
+    # Calculate radius using Sousa et al 2024 mass-radius relations
+    r_pl_rearth=np.zeros_like(m_pl_mearth)
+    #M < 159 M_Earth
+    low_mass_mask=m_pl_mearth<159.0
+    r_pl_rearth[low_mass_mask]=10**(0.59*np.log10(m_pl_mearth[low_mass_mask])-0.15)
+    # M > 159 M_Earth
+    high_mass_mask=~low_mass_mask
+    r_pl_rearth[high_mass_mask]=10**(0.00*np.log10(m_pl_mearth[high_mass_mask])+1.15)
+
+    # Convert to Jupiter radii
+    r_pl_rjup=r_pl_rearth*(u.R_earth/u.R_jup).to('')
+
     # Convert inclination from radians to degrees
     inc_deg=np.degrees(inc)
 
@@ -391,11 +406,19 @@ def main():
     mass_err_lower=mass_median-mass_16th
     mass_err_upper=mass_84th-mass_median
 
+    # radius statistics
+    rad_median=np.median(r_pl_rjup)
+    rad_16th=np.percentile(r_pl_rjup,16)
+    rad_84th=np.percentile(r_pl_rjup,84)
+    rad_err_lower=rad_median-rad_16th
+    rad_err_upper=rad_84th-rad_median
+
     inc_median=np.median(inc_deg)
     inc_16th=np.percentile(inc_deg,16)
     inc_84th=np.percentile(inc_deg,84)
 
     print(f"Planet mass: {mass_median:.2f} +{mass_err_upper:.2f}/-{mass_err_lower:.2f} M_Jup")
+    print(f"Planet radius: {rad_median:.2f} +{rad_err_upper:.2f}/-{rad_err_lower:.2f} R_Jup")
     print(f"Inclination: {inc_median:.2f} [{inc_16th:.2f}, {inc_84th:.2f}] degrees")
     print()
 
@@ -463,6 +486,8 @@ def main():
         f.write(f"#\n")
         f.write(f"# Derived parameters:\n")
         f.write(f"# Planet mass: {mass_median:.3f} +{mass_err_upper:.3f}/-{mass_err_lower:.3f} M_Jup\n")
+        f.write(
+            f"# Planet radius: {rad_median:.3f} +{rad_err_upper:.3f}/-{rad_err_lower:.3f} R_Jup (Chen & Kipping 2017)\n")
         f.write(
             f"# Inclination distribution: {inc_median:.2f} deg (median), [{inc_16th:.2f}, {inc_84th:.2f}] deg (16th-84th percentile)\n")
         f.write("#\n")
