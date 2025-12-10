@@ -487,7 +487,7 @@ def main():
         f.write(f"# Derived parameters:\n")
         f.write(f"# Planet mass: {mass_median:.3f} +{mass_err_upper:.3f}/-{mass_err_lower:.3f} M_Jup\n")
         f.write(
-            f"# Planet radius: {rad_median:.3f} +{rad_err_upper:.3f}/-{rad_err_lower:.3f} R_Jup (Chen & Kipping 2017)\n")
+            f"# Planet radius: {rad_median:.3f} +{rad_err_upper:.3f}/-{rad_err_lower:.3f} R_Jup (Sousa et al 2024)\n")
         f.write(
             f"# Inclination distribution: {inc_median:.2f} deg (median), [{inc_16th:.2f}, {inc_84th:.2f}] deg (16th-84th percentile)\n")
         f.write("#\n")
