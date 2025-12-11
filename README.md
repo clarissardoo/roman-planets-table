@@ -1,4 +1,4 @@
-# RV Planet Angular Separation Generator
+# RV Planet Angular Separation and Phase Angle Generator
 
 This tool computes sky projected angular separations, orbital radii, true anomaly and phase angles for RV detected exoplanets using posterior samples from RadVel. It converts orbital posteriors into these quantities for user selected epochs and writes results to a CSV file.
 
