@@ -7,7 +7,7 @@ This tool computes sky projected angular separations for RV detected exoplanets 
 - Computes RA and Dec offsets and angular separation in mas
 - Uses weighted percentiles based on log likelihood
 - Supports fixed or random inclinations (cos(i))
-- Outputs separation in mas and AU for each epoch
+- Outputs separation in mas and AU, phase angle and true anomaly for each epoch
 - Writes a summary header and full table to CSV
 
 ## Usage
