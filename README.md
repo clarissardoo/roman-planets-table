@@ -24,7 +24,7 @@ python roman-table.py \
     --time-interval 30 \
     --inclination random \
     --nsamp all \
-    --plot
+    --plot y/n
 
 ## Output
 - CSV: <planet>_separations_<start>_to_<end>.csv
