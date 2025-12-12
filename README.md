@@ -12,7 +12,6 @@ sampling options and weighted percentiles using posterior log-likelihoods.
     • gaussian (from orbit_params)
     • user Gaussian (“75±10”)
     • fixed (“90”)
-- Posterior weighting: uses exp(lnprob - lnprob_max)
 - Outputs CSV with median/CI for all quantities
 - Optional plots: 2D sky-plane orbit + time-series panels
 
