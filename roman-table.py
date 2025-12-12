@@ -8,6 +8,7 @@ from orbitize.kepler import calc_orbit
 from astropy import units as u
 from pathlib import Path
 import argparse
+import matplotlib.pyplot as plt
 
 
 def compute_sep(
@@ -240,6 +241,297 @@ def parse_inclination(inc_str):
         raise ValueError(f"Invalid inclination format: '{inc_str}'")
 
 
+def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
+                               n_planets=1,pl_num=1,override_inc=None,
+                               override_lan=None,inc_mean=None,inc_sig=None,
+                               user_inc_mean=None,user_inc_sig=None):
+    """
+    Compute orbit trajectories for 2D plotting (RA/Dec offsets).
+    Returns the same separation data as compute_sep for plots.
+    """
+    myBasis=Basis(basis,n_planets)
+    df=myBasis.to_synth(df)
+    chain_len=len(df)
+    tau_ref_epoch=58849
+
+    # convert RadVel posteriors -> orbitize posteriors
+    m_st=np.random.normal(m0,m0_err,size=chain_len)
+    semiamp=df['k{}'.format(pl_num)].values
+    per_day=df['per{}'.format(pl_num)].values
+    period_yr=per_day/365.25
+    ecc=df['e{}'.format(pl_num)].values
+    msini=(
+            Msini(semiamp,per_day,m_st,ecc,Msini_units='Earth')*
+            (u.M_earth/u.M_sun).to('')
+    )
+
+    # Handle inc sampling
+    if user_inc_mean is not None and user_inc_sig is not None:
+        inc_deg_samples=np.random.normal(user_inc_mean,user_inc_sig,size=chain_len)
+        inc_deg_samples=np.clip(inc_deg_samples,0,180)
+        inc=np.radians(inc_deg_samples)
+    elif override_inc is not None and override_inc!="gaussian":
+        inc=np.full(chain_len,np.radians(override_inc))
+    elif override_inc=="gaussian" and inc_mean is not None and inc_sig is not None:
+        inc_deg_samples=np.random.normal(inc_mean,inc_sig,size=chain_len)
+        inc_deg_samples=np.clip(inc_deg_samples,0,180)
+        inc=np.radians(inc_deg_samples)
+    else:
+        cosi=(2.*np.random.random(size=chain_len))-1.
+        inc=np.arccos(cosi)
+
+    m_pl=msini/np.sin(inc)
+    mtot=m_st+m_pl
+    sma=(period_yr**2*mtot)**(1/3)
+    omega_st_rad=df['w{}'.format(pl_num)].values
+    omega_pl_rad=omega_st_rad+np.pi
+    parallax=np.random.normal(plx,plx_err,size=chain_len)
+
+    if override_lan is not None:
+        lan=np.full(chain_len,np.radians(override_lan))
+    else:
+        lan=np.random.random_sample(size=chain_len)*2.*np.pi
+
+    tp_mjd=df['tp{}'.format(pl_num)].values-2400000.5
+    tau=tp_to_tau(tp_mjd,tau_ref_epoch,period_yr)
+
+    # compute projected separation in mas
+    raoff,deoff,vz=calc_orbit(
+        epochs.mjd,sma,ecc,inc,
+        omega_pl_rad,lan,tau,
+        parallax,mtot,tau_ref_epoch=tau_ref_epoch
+    )
+
+    # Get best-fit index (I don't use this anymore for plots)
+    lnlike=df["lnprobability"].values
+    best_idx=np.argmax(lnlike)
+
+    return raoff,deoff,best_idx
+
+
+def plot_orbital_parameters(csv_data,planet_name,output_prefix,
+                            df_sample=None,params=None,override_inc=None,
+                            override_lan=None,user_inc_mean=None,user_inc_sig=None,
+                            start_date=None,end_date=None):
+    """
+    Create plots including 2D orbits and time-series parameters.
+
+    Args:
+        csv_data (pd.DataFrame): DataFrame with computed orbital parameters
+        planet_name (str): Display name of the planet
+        output_prefix (str): Prefix for output plot files
+        df_sample (pd.DataFrame): Sampled posterior data (for orbit plots)
+        params (dict): Orbital parameters dictionary (for orbit plots)
+        override_inc (float): Fixed inclination override
+        override_lan (float): Fixed longitude of ascending node override
+        user_inc_mean (float): User-provided inclination mean
+        user_inc_sig (float): User-provided inclination std dev
+        start_date (str): Start date for orbit plot
+        end_date (str): End date for orbit plot
+    """
+    # Convert decimal years for plotting
+    years=csv_data['decimal_year'].values
+
+    # Plasma colormap colors
+    cm=plt.cm.plasma
+    c_median=cm(0.6)  # orange
+    c_fill_68=cm(0.2)  # dark purple
+    c_fill_95=cm(0.15)  # very dark purple
+    c_iwa_narrow=cm(0.85)  # bright yellow-orange
+    c_iwa_wide=cm(0.5)  # magenta
+    c_orbit_light=cm(0.2)  # dark purple for orbit traces
+    c_orbit_best=cm(0.95)  # bright yellow for best orbit
+    c_start=cm(0.7)  # orange for start marker
+    c_end=cm(0.3)  # purple for end marker
+    c_star=cm(0.0)  # dark purple/blue for star
+
+    # IWA/OWA values
+    IWA_narrow=155
+    OWA_narrow=436
+    IWA_wide=450
+    OWA_wide=1300
+
+    # Determine if we can plot 2D orbits
+    plot_2d=(df_sample is not None and params is not None)
+
+    if plot_2d:
+        fig=plt.figure(figsize=(20,12))
+        gs=fig.add_gridspec(4,2,width_ratios=[1.2,1],hspace=0.3,wspace=0.3)
+
+        # 2d orbit trajectory
+        epochs_2d=Time(np.linspace(Time(start_date).mjd,Time(end_date).mjd,100),format="mjd")
+        raoff_2d,deoff_2d,best_idx=compute_orbit_for_plotting(
+            df_sample,epochs_2d,
+            params["basis"],params["m0"],params["m0_err"],
+            params["plx"],params["plx_err"],
+            params["n_planets"],params["pl_num"],
+            override_inc=override_inc,
+            override_lan=override_lan,
+            inc_mean=params.get("inc_mean"),
+            inc_sig=params.get("inc_sig"),
+            user_inc_mean=user_inc_mean,
+            user_inc_sig=user_inc_sig
+        )
+
+        ax_orbit=fig.add_subplot(gs[:,0])
+
+        if user_inc_mean is not None and user_inc_sig is not None:
+            inc_str=f'{user_inc_mean:.1f}±{user_inc_sig:.1f}°'
+        elif override_inc=="gaussian" and params.get("inc_mean") is not None:
+            inc_str=f'Gaussian ({params["inc_mean"]:.1f}±{params["inc_sig"]:.1f}°)'
+        elif override_inc is not None:
+            inc_str=f'{override_inc}°'
+        else:
+            inc_str='random'
+
+        lan_str='random' if override_lan is None else f'{override_lan}°'
+        ax_orbit.set_title(f'{planet_name}: Orbital Trajectory\n(i={inc_str}, Ω={lan_str})',
+                           fontsize=14,fontweight='bold',pad=15)
+        ax_orbit.set_xlabel('RA Offset [mas]',fontsize=13,fontweight='bold')
+        ax_orbit.set_ylabel('Dec Offset [mas]',fontsize=13,fontweight='bold')
+
+        #IWA/OWA circles
+        theta=np.linspace(0,2*np.pi,100)
+        ax_orbit.plot(IWA_narrow*np.cos(theta),IWA_narrow*np.sin(theta),
+                      color=c_iwa_narrow,lw=3,linestyle='--',label='IWA/OWA (Narrow)',alpha=0.7)
+        ax_orbit.plot(OWA_narrow*np.cos(theta),OWA_narrow*np.sin(theta),
+                      color=c_iwa_narrow,lw=3,linestyle='--',alpha=0.7)
+        ax_orbit.plot(IWA_wide*np.cos(theta),IWA_wide*np.sin(theta),
+                      color=c_iwa_wide,lw=3,linestyle='--',label='IWA/OWA (Wide)',alpha=0.5)
+        ax_orbit.plot(OWA_wide*np.cos(theta),OWA_wide*np.sin(theta),
+                      color=c_iwa_wide,lw=3,linestyle='--',alpha=0.5)
+
+        # sample orbits
+        n_samples=min(50,raoff_2d.shape[1])
+        sample_indices=np.random.choice(raoff_2d.shape[1],n_samples,replace=False)
+        for i in sample_indices:
+            ax_orbit.plot(raoff_2d[:,i],deoff_2d[:,i],'-',
+                          color=c_orbit_light,alpha=0.2,linewidth=1.5)
+
+        # star <3
+        ax_orbit.plot(0,0,'*',color=c_star,markersize=25,label='Star',
+                      zorder=15,markeredgecolor='yellow',markeredgewidth=0.5)
+
+        ax_orbit.set_aspect('equal')
+        ax_orbit.grid(True,alpha=0.2,linestyle=':')
+        ax_orbit.legend(loc='best',fontsize=11,framealpha=0.9)
+        ax_orbit.tick_params(axis='both',which='major',labelsize=11)
+
+        # Time series plots on right side
+        axes=[fig.add_subplot(gs[i,1]) for i in range(4)]
+
+    else:
+        # Create figure with only time series (4 subplots stacked)
+        fig,axes=plt.subplots(4,1,figsize=(14,12))
+
+    start_year=years[0]
+    end_year=years[-1]
+
+    if not plot_2d:
+        fig.suptitle(f'{planet_name} - Orbital Parameters ({start_year:.1f} → {end_year:.1f})',
+                     fontsize=16,fontweight='bold',y=0.995)
+    else:
+        fig.suptitle(f'{planet_name} - Orbital Analysis ({start_year:.1f} → {end_year:.1f})',
+                     fontsize=16,fontweight='bold',y=0.995)
+
+    # Plot 1: Separation (mas)
+    ax1=axes[0]
+    min_sep=csv_data['separation_mas_16th'].min()
+    max_sep=csv_data['separation_mas_84th'].max()
+    ax1.set_title(f'Sky-Projected Angular Separation (1σ: {min_sep:.0f}-{max_sep:.0f} mas)',
+                  fontsize=12,pad=10)
+    ax1.fill_between(years,
+                     csv_data['separation_mas_2.5th'],
+                     csv_data['separation_mas_97.5th'],
+                     color=c_fill_95,alpha=0.3,label='95% CI')
+    ax1.fill_between(years,
+                     csv_data['separation_mas_16th'],
+                     csv_data['separation_mas_84th'],
+                     color=c_fill_68,alpha=0.5,label='68% CI')
+    ax1.plot(years,csv_data['separation_mas_median'],'-',
+             color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
+
+    ax1.axhline(y=IWA_narrow,color=c_iwa_narrow,linestyle='--',linewidth=2.5,
+                label='IWA/OWA (Narrow)',alpha=0.7)
+    ax1.axhline(y=OWA_narrow,color=c_iwa_narrow,linestyle='--',linewidth=2.5,alpha=0.7)
+    ax1.axhline(y=IWA_wide,color=c_iwa_wide,linestyle='--',linewidth=2.5,
+                label='IWA/OWA (Wide)',alpha=0.5)
+    ax1.axhline(y=OWA_wide,color=c_iwa_wide,linestyle='--',linewidth=2.5,alpha=0.5)
+
+    ax1.set_ylabel('Separation (mas)',fontsize=11,fontweight='bold')
+    ax1.grid(True,alpha=0.25,linestyle=':')
+    ax1.legend(loc='best',fontsize=9,framealpha=0.9)
+    ax1.tick_params(axis='both',which='major',labelsize=10)
+
+    # Plot 2: Orbital Radius (AU)
+    ax2=axes[1]
+    ax2.set_title('3D Orbital Radius',fontsize=12,pad=10)
+
+    ax2.fill_between(years,
+                     csv_data['separation_au_2.5th'],
+                     csv_data['separation_au_97.5th'],
+                     color=c_fill_95,alpha=0.3,label='95% CI')
+    ax2.fill_between(years,
+                     csv_data['separation_au_16th'],
+                     csv_data['separation_au_84th'],
+                     color=c_fill_68,alpha=0.5,label='68% CI')
+    ax2.plot(years,csv_data['separation_au_median'],'-',
+             color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
+
+    ax2.set_ylabel('Orbital Radius (AU)',fontsize=11,fontweight='bold')
+    ax2.grid(True,alpha=0.25,linestyle=':')
+    ax2.legend(loc='best',fontsize=9,framealpha=0.9)
+    ax2.tick_params(axis='both',which='major',labelsize=10)
+
+    # Plot 3: Phase Angle (deg)
+    ax3=axes[2]
+    ax3.set_title('Phase Angle',fontsize=12,pad=10)
+
+    ax3.fill_between(years,
+                     csv_data['phase_angle_deg_2.5th'],
+                     csv_data['phase_angle_deg_97.5th'],
+                     color=c_fill_95,alpha=0.3,label='95% CI')
+    ax3.fill_between(years,
+                     csv_data['phase_angle_deg_16th'],
+                     csv_data['phase_angle_deg_84th'],
+                     color=c_fill_68,alpha=0.5,label='68% CI')
+    ax3.plot(years,csv_data['phase_angle_deg_median'],'-',
+             color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
+
+    ax3.set_ylabel('Phase Angle (°)',fontsize=11,fontweight='bold')
+    ax3.grid(True,alpha=0.25,linestyle=':')
+    ax3.legend(loc='best',fontsize=9,framealpha=0.9)
+    ax3.tick_params(axis='both',which='major',labelsize=10)
+
+    # Plot 4: True Anomaly (deg)
+    ax4=axes[3]
+    ax4.set_title('True Anomaly',fontsize=12,pad=10)
+
+    ax4.fill_between(years,
+                     csv_data['true_anomaly_deg_16th'],
+                     csv_data['true_anomaly_deg_84th'],
+                     color=c_fill_68,alpha=0.5,label='68% CI')
+    ax4.plot(years,csv_data['true_anomaly_deg_median'],'-',
+             color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
+
+    ax4.set_ylabel('True Anomaly (°)',fontsize=11,fontweight='bold')
+    ax4.set_xlabel('Year',fontsize=11,fontweight='bold')
+    ax4.grid(True,alpha=0.25,linestyle=':')
+    ax4.legend(loc='best',fontsize=9,framealpha=0.9)
+    ax4.tick_params(axis='both',which='major',labelsize=10)
+
+    # Ensure all x-axes show the same range
+    for ax in axes:
+        ax.set_xlim(years[0],years[-1])
+
+    plt.tight_layout()
+
+    plot_filename=f"{output_prefix}_orbital_params.png"
+    plt.savefig(plot_filename,dpi=300,bbox_inches='tight')
+    print(f"Plot saved to {plot_filename}")
+    plt.close('all')
+
+
 # Display names for prettier output
 display_names={
     "47_UMa":"47 UMa c",
@@ -268,19 +560,19 @@ orbit_params={
         "basis":"per tc secosw sesinw k",
         "m0":0.905,"m0_err":0.015,
         "plx":79.4274000,"plx_err":0.0776646,
-        "n_planets":5,"pl_num":3,"g_mag":5.732681,"inc_mean":89.73,"inc_sig":24.54
+        "n_planets":5,"pl_num":3,"g_mag":5.732681,
     },
     "eps_Eri":{
         "basis":"per tc secosw sesinw k",
         "m0":0.82,"m0_err":0.02,
         "plx":312.219000,"plx_err":0.467348,
-        "n_planets":1,"pl_num":1,"g_mag":3.465752,"inc_mean":78.81,"inc_sig":29.340
+        "n_planets":1,"pl_num":1,"g_mag":3.465752,"inc_mean":78.810,"inc_sig":29.340
     },
     "HD_87883":{
         "basis":"per tc secosw sesinw k",
         "m0":0.810,"m0_err":0.091,
         "plx":54.6421000,"plx_err":0.0369056,
-        "n_planets":1,"pl_num":1,"g_mag":7.286231,"inc_mean":16.8,"inc_sig":1.7
+        "n_planets":1,"pl_num":1,"g_mag":7.286231,"inc_mean":25.45,"inc_sig":1.61
     },
     "HD_114783":{
         "basis":"per tc secosw sesinw k",
@@ -316,19 +608,19 @@ orbit_params={
         "basis":"per tc secosw sesinw k",
         "m0":1.05963082882500,"m0_err":0.04470613802572,
         "plx":49.8170000,"plx_err":0.0573616,
-        "n_planets":2,"pl_num":2,"g_mag":5.996743
+        "n_planets":2,"pl_num":2,"g_mag":5.996743, "inc_mean":89.3,"inc_sig":9.0
     },
     "pi_Men":{
         "basis":"per tc secosw sesinw k",
         "m0":1.10,"m0_err":0.14,
         "plx":54.705200,"plx_err":0.067131,
-        "n_planets":1,"pl_num":1,"g_mag":5.511580,"inc_mean":45.8,"inc_sig":1.4
+        "n_planets":1,"pl_num":1,"g_mag":5.511580,"inc_mean":54.436,"inc_sig":5.945
     },
     "ups_And":{
         "basis":"per tc secosw sesinw k",
         "m0":1.29419667430000,"m0_err":0.04122482369025,
         "plx":74.571100,"plx_err":0.349118,
-        "n_planets":3,"pl_num":3,"g_mag":3.966133
+        "n_planets":3,"pl_num":3,"g_mag":3.966133, "inc_mean":23.758,"inc_sig":1.316
     },
     "HD_192310":{
         "basis":"per tc secosw sesinw k",
@@ -368,6 +660,9 @@ def main():
 
     parser.add_argument('--output',type=str,default=None,
                         help='Output CSV filename (default: auto-generated)')
+
+    parser.add_argument('--plot',action='store_true',
+                        help='Generate plots of orbital parameters over time')
 
     args=parser.parse_args()
 
@@ -453,6 +748,11 @@ def main():
                 print(f"Error: nsamp must be a number or 'all'")
                 return
 
+    # Ask about plotting if not specified via command line
+    if not args.plot:
+        plot_input=input("Generate plots? (y/n) [n]: ").strip().lower()
+        args.plot=plot_input in ['y','yes']
+
     base_path=Path(args.posterior_dir)
     planet_dir=base_path/args.planet
     files=list(planet_dir.glob("*.csv.bz2"))
@@ -493,6 +793,7 @@ def main():
         inc_display="random"
 
     print(f"  Posterior samples: {args.nsamp}")
+    print(f"  Generate plots: {'Yes' if args.plot else 'No'}")
     print("-"*60)
     print()
 
@@ -685,6 +986,24 @@ def main():
     print(f"  Epochs: {n_epochs}")
     print(
         f"  Separation range: {med_sep.min():.2f} - {med_sep.max():.2f} mas ({med_rad_au.min():.2f} - {med_rad_au.max():.2f} AU)")
+
+    # Generate plots if requested
+    if args.plot:
+        print("\nGenerating plots...")
+        output_prefix=output_file.replace('.csv','')
+        plot_orbital_parameters(
+            csv_data,
+            display_names[args.planet],
+            output_prefix,
+            df_sample=df_sample,
+            params=params,
+            override_inc=override_inc,
+            override_lan=override_lan,
+            user_inc_mean=user_inc_mean,
+            user_inc_sig=user_inc_sig,
+            start_date=args.start_date,
+            end_date=args.end_date
+        )
 
 
 if __name__=="__main__":
