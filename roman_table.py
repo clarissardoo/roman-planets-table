@@ -312,7 +312,7 @@ def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
 def plot_orbital_parameters(csv_data,planet_name,output_prefix,
                             df_sample=None,params=None,override_inc=None,
                             override_lan=None,user_inc_mean=None,user_inc_sig=None,
-                            start_date=None,end_date=None):
+                            start_date=None,end_date=None,figsize=None):
     """
     Create plots including 2D orbits and time-series parameters.
 
@@ -328,6 +328,7 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
         user_inc_sig (float): User-provided inclination std dev
         start_date (str): Start date for orbit plot
         end_date (str): End date for orbit plot
+        figsize (tuple of float): Figure size in inches
     """
     # Convert decimal years for plotting
     years=csv_data['decimal_year'].values
@@ -355,7 +356,8 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
     plot_2d=(df_sample is not None and params is not None)
 
     if plot_2d:
-        fig=plt.figure(figsize=(20,12))
+        if figsize is None: figsize = (20,12)
+        fig=plt.figure(figsize=figsize)
         gs=fig.add_gridspec(4,2,width_ratios=[1.2,1],hspace=0.3,wspace=0.3)
 
         # 2d orbit trajectory
@@ -422,7 +424,8 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
 
     else:
         # Create figure with only time series (4 subplots stacked)
-        fig,axes=plt.subplots(4,1,figsize=(14,12))
+        if figsize is None: figsize = (14,12)
+        fig,axes=plt.subplots(4,1,figsize=figsize)
 
     start_year=years[0]
     end_year=years[-1]
