@@ -50,7 +50,9 @@ def compute_sep(
             np.array: planet masses in solar masses
             np.array: inclinations in radians
             np.array: true anomaly
-            np.array:
+            np.array: z component [mas]
+            np.array: 3D orbital radius [AU]
+            np.array: 3D orbital radius [mas]
     """
 
     myBasis=Basis(basis,n_planets)
@@ -69,6 +71,9 @@ def compute_sep(
             (u.M_earth/u.M_sun).to('')
     )
 
+    #median msini for critical inclination
+    median_msini=np.median(msini)
+
     # Handle inclination sampling
     if user_inc_mean is not None and user_inc_sig is not None:
         # User-provided Gaussian distribution
@@ -86,8 +91,10 @@ def compute_sep(
         inc_deg_samples=np.clip(inc_deg_samples,0,180)
         inc=np.radians(inc_deg_samples)
     else:
-        # Default: uniform random sampling
-        cosi=(2.*np.random.random(size=chain_len))-1.
+        # Default: uniform in cos(inc) random sampling with critical inclination constraint
+        # Critical inclination: where planet becomes a star (0.08 Msun)
+        crit_incrad=np.arcsin(median_msini/0.08)
+        cosi=(2.*np.random.random(size=chain_len)*np.cos(crit_incrad))-1.
         inc=np.arccos(cosi)
 
     m_pl=msini/np.sin(inc)
@@ -113,44 +120,60 @@ def compute_sep(
     )
     seps=np.sqrt(raoff**2+deoff**2)
 
-    # Compute true anomaly for each epoch
+    # Compute true anomaly and 3D positions for each epoch
     n_epochs=len(epochs)
     true_anomaly=np.zeros((n_epochs,chain_len))
+    x_mas=np.zeros((n_epochs,chain_len))
+    y_mas=np.zeros((n_epochs,chain_len))
     z_mas=np.zeros((n_epochs,chain_len))
 
-    # Thiele-Innes coefficients for z-component
+    # Thiele-Innes from my orbit_getpoints
+    A=sma*(np.cos(omega_pl_rad)*np.cos(lan)-np.sin(omega_pl_rad)*np.sin(lan)*np.cos(inc))
+    B=sma*(np.cos(omega_pl_rad)*np.sin(lan)+np.sin(omega_pl_rad)*np.cos(lan)*np.cos(inc))
+    F=sma*(-np.sin(omega_pl_rad)*np.cos(lan)-np.cos(omega_pl_rad)*np.sin(lan)*np.cos(inc))
+    G=sma*(-np.sin(omega_pl_rad)*np.sin(lan)+np.cos(omega_pl_rad)*np.cos(lan)*np.cos(inc))
     C=sma*np.sin(omega_pl_rad)*np.sin(inc)
     H=sma*np.cos(omega_pl_rad)*np.sin(inc)
 
     for i in range(n_epochs):
-        # Mean anomaly
+        # Mean anom
         n_motion=2*np.pi/per_day  # mean motion (rad/day)
         M=n_motion*(epochs.mjd[i]-tp_mjd)
 
-        # ecc anomaly using Newton Raphson method
-        E=M+ecc*np.sin(M)+ecc**2*np.sin(2*M)/2
+        # eccentric anomaly from orbit_getpoints
+        EA=M+ecc*np.sin(M)+ecc**2*np.sin(2*M)/2
         for _ in range(20):
-            err=E-ecc*np.sin(E)-M
+            err=EA-ecc*np.sin(EA)-M
             if np.all(np.abs(err)<1e-15):
                 break
-            E=E-err/(1-ecc*np.cos(E))
+            EA=EA-err/(1-ecc*np.cos(EA))
 
         # True anomaly
         f=2*np.arctan2(
-            np.sqrt(1+ecc)*np.sin(E/2),
-            np.sqrt(1-ecc)*np.cos(E/2)
+            np.sqrt(1+ecc)*np.sin(EA/2),
+            np.sqrt(1-ecc)*np.cos(EA/2)
         )
         true_anomaly[i,:]=f
 
-        # z-component from my orb_getpoints function
-        X=np.cos(E)-ecc
-        Y=np.sqrt(1-ecc**2)*np.sin(E)
+        # Position in orbital plane
+        X=np.cos(EA)-ecc
+        Y=np.sqrt(1-ecc**2)*np.sin(EA)
+
+        # 3D position in AU
+        x_au=(B*X+G*Y)
+        y_au=(A*X+F*Y)
         z_au=(C*X+H*Y)
 
-        # au->mas
+        # Convert to mas
+        x_mas[i,:]=x_au*parallax
+        y_mas[i,:]=y_au*parallax
         z_mas[i,:]=z_au*parallax
 
-    return seps,raoff,deoff,m_pl,inc,true_anomaly,z_mas
+    # 3D orbital radius
+    r_au=np.sqrt(x_mas**2+y_mas**2+z_mas**2)/parallax  #AU
+    r_mas=np.sqrt(x_mas**2+y_mas**2+z_mas**2)  # mas
+
+    return seps,raoff,deoff,m_pl,inc,true_anomaly,z_mas,r_au,r_mas
 
 
 def weighted_percentile(data,weights,percentile):
@@ -167,6 +190,26 @@ def weighted_percentile(data,weights,percentile):
             idx=len(sorted_data)-1
         result[i]=sorted_data[idx]
     return result
+
+
+def weighted_mean(data,weights):
+    """Compute weighted mean along axis 1"""
+    if data.ndim==1:
+        return np.average(data,weights=weights)
+    else:
+        return np.average(data,axis=1,weights=weights)
+
+
+def weighted_std(data,weights):
+    """Compute weighted standard deviation along axis 1"""
+    if data.ndim==1:
+        mean=np.average(data,weights=weights)
+        variance=np.average((data-mean)**2,weights=weights)
+        return np.sqrt(variance)
+    else:
+        mean=np.average(data,axis=1,weights=weights)
+        variance=np.average((data-mean[:,np.newaxis])**2,axis=1,weights=weights)
+        return np.sqrt(variance)
 
 
 def parse_inclination(inc_str):
@@ -266,6 +309,9 @@ def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
             (u.M_earth/u.M_sun).to('')
     )
 
+    # Calculate median msini for critical inclination
+    median_msini=np.median(msini)
+
     # Handle inc sampling
     if user_inc_mean is not None and user_inc_sig is not None:
         inc_deg_samples=np.random.normal(user_inc_mean,user_inc_sig,size=chain_len)
@@ -278,7 +324,9 @@ def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
         inc_deg_samples=np.clip(inc_deg_samples,0,180)
         inc=np.radians(inc_deg_samples)
     else:
-        cosi=(2.*np.random.random(size=chain_len))-1.
+        # Default: uniform random sampling with critical inclination constraint
+        crit_incrad=np.arcsin(median_msini/0.08)
+        cosi=(2.*np.random.random(size=chain_len)*np.cos(crit_incrad))-1.
         inc=np.arccos(cosi)
 
     m_pl=msini/np.sin(inc)
@@ -309,6 +357,7 @@ def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
 
     return raoff,deoff,best_idx
 
+
 def gen_orbit_csv(planet,params,
                   posterior_dir='orbit_fits',
                   output_dir='.',
@@ -321,16 +370,11 @@ def gen_orbit_csv(planet,params,
                   nsamp='all',
                   output=None,
                   plot=True):
-
     base_path=Path(posterior_dir)
     planet_dir=base_path/planet
     files=list(planet_dir.glob("*.csv.bz2"))
     if not files:
         raise UserWarning(f"Error: No posterior data found for {planet} in {planet_dir}")
-    
-    #TEMPORARY:
-    if not inc_mode=='random':
-        raise UserWarning('Only random inclinations are currently configured!')
 
     print(f"Loading posterior data from {files[0]}...")
     df=pd.read_csv(files[0])
@@ -345,9 +389,8 @@ def gen_orbit_csv(planet,params,
     print(f"  Date range: {start_date} to {end_date}")
     print(f"  Time interval: {time_interval} days")
 
-
     if inc_mode=='user_gaussian':
-        inc_value, inc_uncertainty = inc_params
+        inc_value,inc_uncertainty=inc_params
         print(f"  Inclination: Gaussian (μ={inc_value:.1f}°, σ={inc_uncertainty:.1f}°) [user-defined]")
         inc_display=f"{inc_value:.1f}±{inc_uncertainty:.1f}"
         override_inc=None
@@ -360,20 +403,20 @@ def gen_orbit_csv(planet,params,
             inc_display=f"gaussian (μ={params['inc_mean']:.1f}°, σ={params['inc_sig']:.1f}°)"
             override_inc="gaussian"
             user_inc_mean=None
-            user_inc_sig=None        
+            user_inc_sig=None
         else:
             print(f"  No gaussian priors available. Falling back to random inclination.")
             inc_mode="random"
             inc_display="random"
     elif inc_mode=='fixed':
-        inc_value = inc_params[0]
+        inc_value=inc_params[0]
         print(f"  Inclination: {inc_value:.1f}° (fixed)")
         inc_display=f"{inc_value:.1f}"
         override_inc=inc_value
         user_inc_mean=None
         user_inc_sig=None
     else:
-        print(f"  Inclination: random (uniform)")
+        print(f"  Inclination: random (uniform with critical inclination constraint)")
         inc_mode="random"
         inc_display="random"
         override_inc=None
@@ -401,13 +444,12 @@ def gen_orbit_csv(planet,params,
 
     print(f"Computing separations for {n_epochs} epochs...")
 
-
-    seps,raoff,deoff,m_pl,inc,true_anomaly,z_mas=compute_sep(
+    seps,raoff,deoff,m_pl,inc,true_anomaly,z_mas,r_au,r_mas=compute_sep(
         df_sample,epochs,
         params["basis"],params["m0"],params["m0_err"],
         params["plx"],params["plx_err"],
         params["n_planets"],params["pl_num"],
-        override_lan=override_lan,
+        override_lan=None,
         override_inc=override_inc,
         inc_mean=params.get("inc_mean"),
         inc_sig=params.get("inc_sig"),
@@ -415,11 +457,11 @@ def gen_orbit_csv(planet,params,
         user_inc_sig=user_inc_sig
     )
 
-    r_3d=np.sqrt(raoff**2+deoff**2+z_mas**2)
-    phase_angle_rad=np.arccos(z_mas/r_3d)
+    # Phase angle calculation using 3D radius
+    phase_angle_rad=np.arccos(z_mas/r_mas)
     phase_angle_deg=np.degrees(phase_angle_rad)
 
-    lambert_phase = (np.sin(phase_angle_rad) + (np.pi - phase_angle_rad) * np.cos(phase_angle_rad)) / np.pi
+    lambert_phase=(np.sin(phase_angle_rad)+(np.pi-phase_angle_rad)*np.cos(phase_angle_rad))/np.pi
 
     m_pl_mjup=m_pl*(u.M_sun/u.M_jup).to('')
     m_pl_mearth=m_pl*(u.M_sun/u.M_earth).to('')
@@ -465,11 +507,14 @@ def gen_orbit_csv(planet,params,
     weights=np.exp(lnlike-np.max(lnlike))
     weights=weights/np.sum(weights)
 
+    # Compute percentiles, mean, and std for all quantities
     med_sep=weighted_percentile(seps,weights,50)
     low_sep=weighted_percentile(seps,weights,16)
     high_sep=weighted_percentile(seps,weights,84)
     low_sep_95=weighted_percentile(seps,weights,2.5)
     high_sep_95=weighted_percentile(seps,weights,97.5)
+    mean_sep=weighted_mean(seps,weights)
+    std_sep=weighted_std(seps,weights)
 
     distance_pc=1000.0/params["plx"]
     med_rad_au=med_sep*distance_pc/1000.0
@@ -477,23 +522,49 @@ def gen_orbit_csv(planet,params,
     high_rad_au=high_sep*distance_pc/1000.0
     low_rad_au_95=low_sep_95*distance_pc/1000.0
     high_rad_au_95=high_sep_95*distance_pc/1000.0
+    mean_rad_au=mean_sep*distance_pc/1000.0
+    std_rad_au=std_sep*distance_pc/1000.0
+
+    # 3D orbital radius statistics
+    med_r_au=weighted_percentile(r_au,weights,50)
+    low_r_au=weighted_percentile(r_au,weights,16)
+    high_r_au=weighted_percentile(r_au,weights,84)
+    low_r_au_95=weighted_percentile(r_au,weights,2.5)
+    high_r_au_95=weighted_percentile(r_au,weights,97.5)
+    mean_r_au=weighted_mean(r_au,weights)
+    std_r_au=weighted_std(r_au,weights)
+
+    med_r_mas=weighted_percentile(r_mas,weights,50)
+    low_r_mas=weighted_percentile(r_mas,weights,16)
+    high_r_mas=weighted_percentile(r_mas,weights,84)
+    low_r_mas_95=weighted_percentile(r_mas,weights,2.5)
+    high_r_mas_95=weighted_percentile(r_mas,weights,97.5)
+    mean_r_mas=weighted_mean(r_mas,weights)
+    std_r_mas=weighted_std(r_mas,weights)
+
     med_phase=weighted_percentile(phase_angle_deg,weights,50)
     low_phase=weighted_percentile(phase_angle_deg,weights,16)
     high_phase=weighted_percentile(phase_angle_deg,weights,84)
     low_phase_95=weighted_percentile(phase_angle_deg,weights,2.5)
     high_phase_95=weighted_percentile(phase_angle_deg,weights,97.5)
+    mean_phase=weighted_mean(phase_angle_deg,weights)
+    std_phase=weighted_std(phase_angle_deg,weights)
 
     med_lambert_phase=weighted_percentile(lambert_phase,weights,50)
     low_lambert_phase=weighted_percentile(lambert_phase,weights,16)
     high_lambert_phase=weighted_percentile(lambert_phase,weights,84)
     low_lambert_phase_95=weighted_percentile(lambert_phase,weights,2.5)
     high_lambert_phase_95=weighted_percentile(lambert_phase,weights,97.5)
+    mean_lambert_phase=weighted_mean(lambert_phase,weights)
+    std_lambert_phase=weighted_std(lambert_phase,weights)
 
     true_anomaly_deg=np.degrees(true_anomaly)
     true_anomaly_deg=true_anomaly_deg%360
     med_nu=weighted_percentile(true_anomaly_deg,weights,50)
     low_nu=weighted_percentile(true_anomaly_deg,weights,16)
     high_nu=weighted_percentile(true_anomaly_deg,weights,84)
+    mean_nu=weighted_mean(true_anomaly_deg,weights)
+    std_nu=weighted_std(true_anomaly_deg,weights)
 
     csv_data=pd.DataFrame({
         'date_iso':epochs.iso,
@@ -504,24 +575,48 @@ def gen_orbit_csv(planet,params,
         'separation_mas_84th':high_sep,
         'separation_mas_2.5th':low_sep_95,
         'separation_mas_97.5th':high_sep_95,
+        'separation_mas_mean':mean_sep,
+        'separation_mas_std':std_sep,
         'separation_au_median':med_rad_au,
         'separation_au_16th':low_rad_au,
         'separation_au_84th':high_rad_au,
         'separation_au_2.5th':low_rad_au_95,
         'separation_au_97.5th':high_rad_au_95,
+        'separation_au_mean':mean_rad_au,
+        'separation_au_std':std_rad_au,
+        'orbital_radius_au_median':med_r_au,
+        'orbital_radius_au_16th':low_r_au,
+        'orbital_radius_au_84th':high_r_au,
+        'orbital_radius_au_2.5th':low_r_au_95,
+        'orbital_radius_au_97.5th':high_r_au_95,
+        'orbital_radius_au_mean':mean_r_au,
+        'orbital_radius_au_std':std_r_au,
+        'orbital_radius_mas_median':med_r_mas,
+        'orbital_radius_mas_16th':low_r_mas,
+        'orbital_radius_mas_84th':high_r_mas,
+        'orbital_radius_mas_2.5th':low_r_mas_95,
+        'orbital_radius_mas_97.5th':high_r_mas_95,
+        'orbital_radius_mas_mean':mean_r_mas,
+        'orbital_radius_mas_std':std_r_mas,
         'phase_angle_deg_median':med_phase,
         'phase_angle_deg_16th':low_phase,
         'phase_angle_deg_84th':high_phase,
         'phase_angle_deg_2.5th':low_phase_95,
         'phase_angle_deg_97.5th':high_phase_95,
+        'phase_angle_deg_mean':mean_phase,
+        'phase_angle_deg_std':std_phase,
         'lambert_phase_median':med_lambert_phase,
         'lambert_phase_16th':low_lambert_phase,
         'lambert_phase_84th':high_lambert_phase,
         'lambert_phase_2.5th':low_lambert_phase_95,
         'lambert_phase_97.5th':high_lambert_phase_95,
+        'lambert_phase_mean':mean_lambert_phase,
+        'lambert_phase_std':std_lambert_phase,
         'true_anomaly_deg_median':med_nu,
         'true_anomaly_deg_16th':low_nu,
         'true_anomaly_deg_84th':high_nu,
+        'true_anomaly_deg_mean':mean_nu,
+        'true_anomaly_deg_std':std_nu,
     })
 
     # output file name
@@ -531,7 +626,7 @@ def gen_orbit_csv(planet,params,
     else:
         output_file=output
 
-    output_fpath = os.path.join(output_dir,output_file)
+    output_fpath=os.path.join(output_dir,output_file)
     print(f"Writing output to {output_fpath}...")
     with open(output_fpath,'w') as f:
         f.write(f"# Planet: {display_names[planet]}\n")
@@ -561,7 +656,6 @@ def gen_orbit_csv(planet,params,
     print(
         f"  Separation range: {med_sep.min():.2f} - {med_sep.max():.2f} mas ({med_rad_au.min():.2f} - {med_rad_au.max():.2f} AU)")
 
-    
     # Generate plots if requested
     if plot:
         print("\nGenerating plots...")
@@ -573,7 +667,7 @@ def gen_orbit_csv(planet,params,
             df_sample=df_sample,
             params=params,
             # override_inc=override_inc,
-            override_lan=override_lan,
+            override_lan=None,
             # user_inc_mean=user_inc_mean,
             # user_inc_sig=user_inc_sig,
             start_date=start_date,
@@ -581,7 +675,8 @@ def gen_orbit_csv(planet,params,
             fig_ext='pdf'
         )
 
-    return df_sample, csv_data
+    return df_sample,csv_data
+
 
 def plot_orbital_parameters(csv_data,planet_name,output_prefix,
                             df_sample=None,params=None,override_inc=None,
@@ -633,7 +728,7 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
     plot_2d=(df_sample is not None and params is not None)
 
     if plot_2d:
-        if figsize is None: figsize = (20,12)
+        if figsize is None: figsize=(20,12)
         fig=plt.figure(figsize=figsize)
         gs=fig.add_gridspec(4,2,width_ratios=[1.2,1],hspace=0.3,wspace=0.3)
 
@@ -701,7 +796,7 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
 
     else:
         # Create figure with only time series (4 subplots stacked)
-        if figsize is None: figsize = (14,12)
+        if figsize is None: figsize=(14,12)
         fig,axes=plt.subplots(4,1,figsize=figsize)
 
     start_year=years[0]
@@ -890,7 +985,7 @@ orbit_params={
         "basis":"per tc secosw sesinw k",
         "m0":1.05963082882500,"m0_err":0.04470613802572,
         "plx":49.8170000,"plx_err":0.0573616,
-        "n_planets":2,"pl_num":2,"g_mag":5.996743, "inc_mean":89.3,"inc_sig":9.0
+        "n_planets":2,"pl_num":2,"g_mag":5.996743,"inc_mean":89.3,"inc_sig":9.0
     },
     "pi_Men":{
         "basis":"per tc secosw sesinw k",
@@ -902,7 +997,7 @@ orbit_params={
         "basis":"per tc secosw sesinw k",
         "m0":1.29419667430000,"m0_err":0.04122482369025,
         "plx":74.571100,"plx_err":0.349118,
-        "n_planets":3,"pl_num":3,"g_mag":3.966133, "inc_mean":23.758,"inc_sig":1.316
+        "n_planets":3,"pl_num":3,"g_mag":3.966133,"inc_mean":23.758,"inc_sig":1.316
     },
     "HD_192310":{
         "basis":"per tc secosw sesinw k",
@@ -992,7 +1087,7 @@ def main():
         while True:
             if has_gaussian_info:
                 print(f"\nInclination options:")
-                print(f"  - Press Enter for 'random' (uniform distribution)")
+                print(f"  - Press Enter for 'random' (cos i uniform distribution)")
                 print(
                     f"  - It appears this system already has an inclination constraint. Type 'gaussian' to sample from Gaussian fit (mean={params['inc_mean']:.1f}°, σ={params['inc_sig']:.1f}°)")
                 print(f"  - Type a specific value in degrees (e.g., 90)")
@@ -1000,7 +1095,7 @@ def main():
                 args.inclination=input("Inclination [random]: ").strip() or "random"
             else:
                 print(f"\nInclination options:")
-                print(f"  - Press Enter for 'random' (uniform distribution)")
+                print(f"  - Press Enter for 'random' (cos i uniform distribution)")
                 print(f"  - Type a specific value in degrees (e.g., 90)")
                 print(f"  - Type a value with uncertainty (e.g., 90±5 or 90+/-5)")
                 args.inclination=input("Inclination [random]: ").strip() or "random"
@@ -1035,27 +1130,25 @@ def main():
         plot_input=input("Generate plots? (y/n) [n]: ").strip().lower()
         args.plot=plot_input in ['y','yes']
 
-    output = f'{args.planet}_{args.start_date}_to_{args.end_date}_RVOnly.csv'
-    output_dir = '.'
+    output=f'{args.planet}_{args.start_date}_to_{args.end_date}_RVOnly.csv'
+    output_dir='.'
     override_lan=0.
 
     inc_mode,inc_value,inc_uncertainty=parse_inclination(args.inclination)
-    inc_params = [inc_value,inc_uncertainty]
+    inc_params=[inc_value,inc_uncertainty]
 
-    if not inc_mode == 'random':
-        raise UserWarning('Inclinations other than random are maybe broken right now! Double check before using and removing this warning. -Ell')
-    df_samples, csv_data = gen_orbit_csv(args.planet,params,
-                  args.posterior_dir,
-                  output_dir,
-                  args.start_date,
-                  args.end_date,
-                  args.time_interval,
-                  inc_mode,
-                  inc_params,
-                  override_lan,
-                  args.nsamp,
-                  output,
-                  args.plot)
+    df_samples,csv_data=gen_orbit_csv(args.planet,params,
+                                      args.posterior_dir,
+                                      output_dir,
+                                      args.start_date,
+                                      args.end_date,
+                                      args.time_interval,
+                                      inc_mode,
+                                      inc_params,
+                                      override_lan,
+                                      args.nsamp,
+                                      output,
+                                      args.plot)
 
 
 if __name__=="__main__":
