@@ -9,6 +9,7 @@ from astropy import units as u
 from pathlib import Path
 import argparse
 import matplotlib.pyplot as plt
+import os
 
 
 def compute_sep(
