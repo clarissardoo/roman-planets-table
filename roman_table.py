@@ -308,6 +308,265 @@ def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
 
     return raoff,deoff,best_idx
 
+def gen_orbit_csv(planet,params,
+                  posterior_dir='orbit_fits',
+                  output_dir='.',
+                  start_date='2027-01-01',
+                  end_date='2027-06-01',
+                  time_interval=1,
+                  inc_mode='random',
+                  inc_params=None,
+                  override_lan=0.,
+                  nsamp='all',
+                  output=None,
+                  plot=True):
+
+    base_path=Path(posterior_dir)
+    planet_dir=base_path/planet
+    files=list(planet_dir.glob("*.csv.bz2"))
+    if not files:
+        raise UserWarning(f"Error: No posterior data found for {planet} in {planet_dir}")
+    
+    #TEMPORARY:
+    if not inc_mode=='random':
+        raise UserWarning('Only random inclinations are currently configured!')
+
+    print(f"Loading posterior data from {files[0]}...")
+    df=pd.read_csv(files[0])
+    if nsamp=='all':
+        nsamp=len(df)
+        print(f"Using all {nsamp} posterior samples")
+
+    print()
+    print("-"*60)
+    print(f"Configuration:")
+    print(f"  Planet: {display_names[planet]}")
+    print(f"  Date range: {start_date} to {end_date}")
+    print(f"  Time interval: {time_interval} days")
+
+
+    if inc_mode=='user_gaussian':
+        inc_value, inc_uncertainty = inc_params
+        print(f"  Inclination: Gaussian (μ={inc_value:.1f}°, σ={inc_uncertainty:.1f}°) [user-defined]")
+        inc_display=f"{inc_value:.1f}±{inc_uncertainty:.1f}"
+    elif inc_mode=='gaussian':
+        has_gaussian_info="inc_mean" in params and "inc_sig" in params
+        if has_gaussian_info:
+            print(f"  Inclination: Gaussian (μ={params['inc_mean']:.1f}°, σ={params['inc_sig']:.1f}°)")
+            inclination="gaussian"
+            inc_display=f"gaussian (μ={params['inc_mean']:.1f}°, σ={params['inc_sig']:.1f}°)"
+        else:
+            print(f"  Inclination: random (uniform). No gaussian priors available.")
+            inc_mode="random"
+            inc_display="random"
+    elif inc_mode=='fixed':
+        inc_value = inc_params[0]
+        print(f"  Inclination: {inc_value:.1f}° (fixed)")
+        inc_display=f"{inc_value:.1f}"
+    else:
+        print(f"  Inclination: random (uniform)")
+        inc_mode="random"
+        inc_display="random"
+
+    print(f"  Posterior samples: {nsamp}")
+    print("-"*60)
+    print()
+
+    t_start=Time(start_date)
+    t_end=Time(end_date)
+
+    if t_end<=t_start:
+        raise ValueError("Error: End date must be after start date")
+
+    print(f"Sampling {nsamp} orbits from posterior...")
+    df_sample=df.sample(nsamp,replace=True)
+
+    n_epochs=int((t_end.mjd-t_start.mjd)/time_interval)+1
+    epochs=Time(np.linspace(t_start.mjd,t_end.mjd,n_epochs),format="mjd")
+
+    print(f"Computing separations for {n_epochs} epochs...")
+
+
+    seps,raoff,deoff,m_pl,inc,true_anomaly,z_mas=compute_sep(
+        df_sample,epochs,
+        params["basis"],params["m0"],params["m0_err"],
+        params["plx"],params["plx_err"],
+        params["n_planets"],params["pl_num"],
+        override_lan=override_lan,
+        # override_inc=override_inc,
+        # inc_mean=params.get("inc_mean"),
+        # inc_sig=params.get("inc_sig"),
+        # user_inc_mean=user_inc_mean,
+        # user_inc_sig=user_inc_sig
+    )
+
+    r_3d=np.sqrt(raoff**2+deoff**2+z_mas**2)
+    phase_angle_rad=np.arccos(z_mas/r_3d)
+    phase_angle_deg=np.degrees(phase_angle_rad)
+
+    lambert_phase = (np.sin(phase_angle_rad) + (np.pi - phase_angle_rad) * np.cos(phase_angle_rad)) / np.pi
+
+    m_pl_mjup=m_pl*(u.M_sun/u.M_jup).to('')
+    m_pl_mearth=m_pl*(u.M_sun/u.M_earth).to('')
+
+    mass_intervals=np.array([0,2.04,95.16,317.828407,26635.6863,np.inf])
+    C=np.array([0.00346053,-0.06613329,0.48091861,1.04956612,-2.84926757])
+    S=np.array([0.279,0.50376436,0.22725968,0,0.881])
+    r_pl_rearth=np.zeros_like(m_pl_mearth)
+    for i in range(len(mass_intervals)-1):
+        mask=(m_pl_mearth>=mass_intervals[i])&(m_pl_mearth<mass_intervals[i+1])
+        if np.any(mask):
+            r_pl_rearth[mask]=10**(C[i]+S[i]*np.log10(m_pl_mearth[mask]))
+
+    r_pl_rjup=r_pl_rearth*(u.R_earth/u.R_jup).to('')
+
+    inc_deg=np.degrees(inc)
+    mass_median=np.median(m_pl_mjup)
+    mass_16th=np.percentile(m_pl_mjup,16)
+    mass_84th=np.percentile(m_pl_mjup,84)
+    mass_err_lower=mass_median-mass_16th
+    mass_err_upper=mass_84th-mass_median
+    rad_median=np.median(r_pl_rjup)
+    rad_16th=np.percentile(r_pl_rjup,16)
+    rad_84th=np.percentile(r_pl_rjup,84)
+    rad_err_lower=rad_median-rad_16th
+    rad_err_upper=rad_84th-rad_median
+    inc_median=np.median(inc_deg)
+    inc_16th=np.percentile(inc_deg,16)
+    inc_84th=np.percentile(inc_deg,84)
+
+    print(f"Planet mass: {mass_median:.2f} +{mass_err_upper:.2f}/-{mass_err_lower:.2f} M_Jup")
+    print(f"Planet radius: {rad_median:.2f} +{rad_err_upper:.2f}/-{rad_err_lower:.2f} R_Jup")
+    print(f"Inclination: {inc_median:.2f} [{inc_16th:.2f}, {inc_84th:.2f}] degrees")
+    print()
+
+    # This is where we weight the posteriors by lnlike
+
+    # Get lnlike for weighting the posteriors
+    myBasis=Basis(params["basis"],params["n_planets"])
+    df_synth=myBasis.to_synth(df_sample)
+    lnlike=df_synth["lnprobability"].values
+
+    weights=np.exp(lnlike-np.max(lnlike))
+    weights=weights/np.sum(weights)
+
+    med_sep=weighted_percentile(seps,weights,50)
+    low_sep=weighted_percentile(seps,weights,16)
+    high_sep=weighted_percentile(seps,weights,84)
+    low_sep_95=weighted_percentile(seps,weights,2.5)
+    high_sep_95=weighted_percentile(seps,weights,97.5)
+
+    distance_pc=1000.0/params["plx"]
+    med_rad_au=med_sep*distance_pc/1000.0
+    low_rad_au=low_sep*distance_pc/1000.0
+    high_rad_au=high_sep*distance_pc/1000.0
+    low_rad_au_95=low_sep_95*distance_pc/1000.0
+    high_rad_au_95=high_sep_95*distance_pc/1000.0
+    med_phase=weighted_percentile(phase_angle_deg,weights,50)
+    low_phase=weighted_percentile(phase_angle_deg,weights,16)
+    high_phase=weighted_percentile(phase_angle_deg,weights,84)
+    low_phase_95=weighted_percentile(phase_angle_deg,weights,2.5)
+    high_phase_95=weighted_percentile(phase_angle_deg,weights,97.5)
+
+    med_lambert_phase=weighted_percentile(lambert_phase,weights,50)
+    low_lambert_phase=weighted_percentile(lambert_phase,weights,16)
+    high_lambert_phase=weighted_percentile(lambert_phase,weights,84)
+    low_lambert_phase_95=weighted_percentile(lambert_phase,weights,2.5)
+    high_lambert_phase_95=weighted_percentile(lambert_phase,weights,97.5)
+
+    true_anomaly_deg=np.degrees(true_anomaly)
+    true_anomaly_deg=true_anomaly_deg%360
+    med_nu=weighted_percentile(true_anomaly_deg,weights,50)
+    low_nu=weighted_percentile(true_anomaly_deg,weights,16)
+    high_nu=weighted_percentile(true_anomaly_deg,weights,84)
+
+    csv_data=pd.DataFrame({
+        'date_iso':epochs.iso,
+        'mjd':epochs.mjd,
+        'decimal_year':epochs.decimalyear,
+        'separation_mas_median':med_sep,
+        'separation_mas_16th':low_sep,
+        'separation_mas_84th':high_sep,
+        'separation_mas_2.5th':low_sep_95,
+        'separation_mas_97.5th':high_sep_95,
+        'separation_au_median':med_rad_au,
+        'separation_au_16th':low_rad_au,
+        'separation_au_84th':high_rad_au,
+        'separation_au_2.5th':low_rad_au_95,
+        'separation_au_97.5th':high_rad_au_95,
+        'phase_angle_deg_median':med_phase,
+        'phase_angle_deg_16th':low_phase,
+        'phase_angle_deg_84th':high_phase,
+        'phase_angle_deg_2.5th':low_phase_95,
+        'phase_angle_deg_97.5th':high_phase_95,
+        'lambert_phase_median':med_lambert_phase,
+        'lambert_phase_16th':low_lambert_phase,
+        'lambert_phase_84th':high_lambert_phase,
+        'lambert_phase_2.5th':low_lambert_phase_95,
+        'lambert_phase_97.5th':high_lambert_phase_95,
+        'true_anomaly_deg_median':med_nu,
+        'true_anomaly_deg_16th':low_nu,
+        'true_anomaly_deg_84th':high_nu,
+    })
+
+    # output file name
+    if output is None:
+        planet_name=planet.replace("_","")
+        output_file=f"{planet_name}_separations_{start_date}_to_{end_date}.csv"
+    else:
+        output_file=output
+
+    output_fpath = os.path.join(output_dir,output_file)
+    print(f"Writing output to {output_fpath}...")
+    with open(output_fpath,'w') as f:
+        f.write(f"# Planet: {display_names[planet]}\n")
+        f.write(f"# Date range: {start_date} to {end_date}\n")
+        f.write(f"# Time interval: {time_interval} days\n")
+        f.write(f"# Inclination: {inc_display}\n")
+        f.write(f"# Number of posterior samples: {nsamp}\n")
+        f.write(f"# Number of epochs: {n_epochs}\n")
+        f.write(f"#\n")
+        f.write(f"# System parameters:\n")
+        f.write(f"# Distance: {distance_pc:.2f} pc (parallax: {params['plx']:.2f} +/- {params['plx_err']:.2f} mas)\n")
+        f.write(f"#\n")
+        f.write(f"# Derived parameters:\n")
+        f.write(f"# Planet mass: {mass_median:.3f} +{mass_err_upper:.3f}/-{mass_err_lower:.3f} M_Jup\n")
+        f.write(
+            f"# Planet radius: {rad_median:.3f} +{rad_err_upper:.3f}/-{rad_err_lower:.3f} R_Jup\n")
+        f.write(
+            f"# Inclination distribution: {inc_median:.2f} deg (median), [{inc_16th:.2f}, {inc_84th:.2f}] deg (16th-84th percentile)\n")
+        f.write("#\n")
+        csv_data.to_csv(f,index=False)
+
+    print(f"Output saved to {output_fpath}")
+    print(f"\nSummary:")
+    print(f"  Planet: {display_names[planet]}")
+    print(f"  Distance: {distance_pc:.2f} pc")
+    print(f"  Epochs: {n_epochs}")
+    print(
+        f"  Separation range: {med_sep.min():.2f} - {med_sep.max():.2f} mas ({med_rad_au.min():.2f} - {med_rad_au.max():.2f} AU)")
+
+    
+    # Generate plots if requested
+    if plot:
+        print("\nGenerating plots...")
+        output_prefix=output_fpath.replace('.csv','')
+        plot_orbital_parameters(
+            csv_data,
+            display_names[planet],
+            output_prefix,
+            df_sample=df_sample,
+            params=params,
+            # override_inc=override_inc,
+            override_lan=override_lan,
+            # user_inc_mean=user_inc_mean,
+            # user_inc_sig=user_inc_sig,
+            start_date=start_date,
+            end_date=end_date,
+            fig_ext='pdf'
+        )
+
+    return df_sample, csv_data
 
 def plot_orbital_parameters(csv_data,planet_name,output_prefix,
                             df_sample=None,params=None,override_inc=None,
