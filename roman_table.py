@@ -312,7 +312,8 @@ def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
 def plot_orbital_parameters(csv_data,planet_name,output_prefix,
                             df_sample=None,params=None,override_inc=None,
                             override_lan=None,user_inc_mean=None,user_inc_sig=None,
-                            start_date=None,end_date=None,figsize=None):
+                            start_date=None,end_date=None,figsize=None,fig_ext='png',
+                            show_plots=False):
     """
     Create plots including 2D orbits and time-series parameters.
 
@@ -329,6 +330,8 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
         start_date (str): Start date for orbit plot
         end_date (str): End date for orbit plot
         figsize (tuple of float): Figure size in inches
+        fig_ext (str): file extension for saved figure, defaults to 'png'
+        show_plots (bool): display the figure in output stream, defaults False
     """
     # Convert decimal years for plotting
     years=csv_data['decimal_year'].values
@@ -529,9 +532,11 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
 
     plt.tight_layout()
 
-    plot_filename=f"{output_prefix}_orbital_params.png"
+    plot_filename=f"{output_prefix}_orbital_params.{fig_ext}"
     plt.savefig(plot_filename,dpi=300,bbox_inches='tight')
     print(f"Plot saved to {plot_filename}")
+    if show_plots:
+        plt.show()
     plt.close('all')
 
 
