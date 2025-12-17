@@ -460,7 +460,7 @@ def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
 def load_point_cloud(planet,
                      i_dir='.',
                      start_date='2027-01-01',
-                     end_date='2027-06-01',
+                     end_date='2027-06-30',
                      fname=None,
                      broadcast_arrays=True,
                      ):
@@ -474,7 +474,6 @@ def load_point_cloud(planet,
     print(f'Loading point cloud from {fpath}')
     if os.path.exists(fpath):
         with open(fpath,'rb') as f:
-            # f.seek(0)
             point_cloud = pickle.load(f)
     else:
         raise FileNotFoundError
@@ -498,7 +497,7 @@ def gen_point_cloud(planet,
                   posterior_dir='orbit_fits',
                   output_dir='.',
                   start_date='2027-01-01',
-                  end_date='2027-06-01',
+                  end_date='2027-06-30',
                   time_interval=1,
                   inc_mode='random',
                   inc_params=None,
@@ -673,7 +672,7 @@ def gen_summary_csv(planet,params,
                   posterior_dir='orbit_fits',
                   output_dir='.',
                   start_date='2027-01-01',
-                  end_date='2027-06-01',
+                  end_date='2027-06-30',
                   time_interval=1,
                   inc_mode='random',
                   inc_params=None,
@@ -1130,7 +1129,7 @@ def main():
                         help='Start date in YYYY-MM-DD format (default: 2027-01-01)')
 
     parser.add_argument('--end-date',type=str,default=None,
-                        help='End date in YYYY-MM-DD format (default: 2027-06-01)')
+                        help='End date in YYYY-MM-DD format (default: 2027-06-30)')
 
     parser.add_argument('--time-interval',type=int,default=None,
                         help='Time interval in days (default: 1)')
