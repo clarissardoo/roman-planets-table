@@ -563,12 +563,15 @@ def gen_orbit_csv(planet,params,
     med_nu=weighted_percentile(true_anomaly_deg,weights,50)
     low_nu=weighted_percentile(true_anomaly_deg,weights,16)
     high_nu=weighted_percentile(true_anomaly_deg,weights,84)
+    low_nu_95=weighted_percentile(true_anomaly_deg,weights,2.5)
+    high_nu_95=weighted_percentile(true_anomaly_deg,weights,97.5)
     mean_nu=weighted_mean(true_anomaly_deg,weights)
     std_nu=weighted_std(true_anomaly_deg,weights)
 
     csv_data=pd.DataFrame({
         'date_iso':epochs.iso,
         'mjd':epochs.mjd,
+
         'decimal_year':epochs.decimalyear,
         'separation_mas_median':med_sep,
         'separation_mas_16th':low_sep,
@@ -577,13 +580,7 @@ def gen_orbit_csv(planet,params,
         'separation_mas_97.5th':high_sep_95,
         'separation_mas_mean':mean_sep,
         'separation_mas_std':std_sep,
-        'separation_au_median':med_rad_au,
-        'separation_au_16th':low_rad_au,
-        'separation_au_84th':high_rad_au,
-        'separation_au_2.5th':low_rad_au_95,
-        'separation_au_97.5th':high_rad_au_95,
-        'separation_au_mean':mean_rad_au,
-        'separation_au_std':std_rad_au,
+
         'orbital_radius_au_median':med_r_au,
         'orbital_radius_au_16th':low_r_au,
         'orbital_radius_au_84th':high_r_au,
@@ -591,13 +588,7 @@ def gen_orbit_csv(planet,params,
         'orbital_radius_au_97.5th':high_r_au_95,
         'orbital_radius_au_mean':mean_r_au,
         'orbital_radius_au_std':std_r_au,
-        'orbital_radius_mas_median':med_r_mas,
-        'orbital_radius_mas_16th':low_r_mas,
-        'orbital_radius_mas_84th':high_r_mas,
-        'orbital_radius_mas_2.5th':low_r_mas_95,
-        'orbital_radius_mas_97.5th':high_r_mas_95,
-        'orbital_radius_mas_mean':mean_r_mas,
-        'orbital_radius_mas_std':std_r_mas,
+
         'phase_angle_deg_median':med_phase,
         'phase_angle_deg_16th':low_phase,
         'phase_angle_deg_84th':high_phase,
@@ -605,6 +596,7 @@ def gen_orbit_csv(planet,params,
         'phase_angle_deg_97.5th':high_phase_95,
         'phase_angle_deg_mean':mean_phase,
         'phase_angle_deg_std':std_phase,
+
         'lambert_phase_median':med_lambert_phase,
         'lambert_phase_16th':low_lambert_phase,
         'lambert_phase_84th':high_lambert_phase,
@@ -612,9 +604,12 @@ def gen_orbit_csv(planet,params,
         'lambert_phase_97.5th':high_lambert_phase_95,
         'lambert_phase_mean':mean_lambert_phase,
         'lambert_phase_std':std_lambert_phase,
+
         'true_anomaly_deg_median':med_nu,
         'true_anomaly_deg_16th':low_nu,
         'true_anomaly_deg_84th':high_nu,
+        'true_anomaly_deg_2.5th':low_nu,
+        'true_anomaly_deg_97.5th':high_nu,
         'true_anomaly_deg_mean':mean_nu,
         'true_anomaly_deg_std':std_nu,
     })
