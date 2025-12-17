@@ -7,9 +7,8 @@ from orbitize.basis import tp_to_tau
 from orbitize.kepler import calc_orbit
 from astropy import units as u
 from pathlib import Path
-import argparse
 import matplotlib.pyplot as plt
-import os, pickle, warnings
+import os, pickle, warnings, argparse, io
 
 
 # Display names for prettier output
@@ -458,6 +457,42 @@ def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
     return raoff,deoff,best_idx
 
 
+def load_point_cloud(planet,
+                     i_dir='.',
+                     start_date='2027-01-01',
+                     end_date='2027-06-01',
+                     fname=None,
+                     broadcast_arrays=True,
+                     ):
+
+    
+    # Load pickle
+    if fname is None:
+        planet_name=planet.replace("_","")
+        fname=f"{planet_name}_{start_date}_to_{end_date}_PointCloud.pkl"
+    fpath=os.path.join(i_dir,fname)    
+    print(f'Loading point cloud from {fpath}')
+    if os.path.exists(fpath):
+        with open(fpath,'rb') as f:
+            # f.seek(0)
+            point_cloud = pickle.load(f)
+    else:
+        raise FileNotFoundError
+
+    # recast data to consistent array size
+    if broadcast_arrays:
+        arr_shape = point_cloud['sep_mas'].shape
+        for param, arr in point_cloud.items():
+            if arr.shape == (arr_shape[0],):
+                point_cloud[param] = np.full(arr_shape,arr[:,np.newaxis])
+            elif arr.shape == (arr_shape[1],):
+                point_cloud[param] = np.full(arr_shape,arr)
+            elif arr.shape != arr_shape:
+                raise ValueError(f'param {param} has unexpected array shape {arr.shape}, when sep_mas has shape {arr_shape}.')
+
+    return point_cloud
+
+
 def gen_point_cloud(planet,
                   params=None, #override default planet params
                   posterior_dir='orbit_fits',
@@ -469,7 +504,8 @@ def gen_point_cloud(planet,
                   inc_params=None,
                   override_lan=0.,
                   nsamp='all',
-                  out_fname=None):
+                  out_fname=None,
+                  standard_arr_size=False):
     
     base_path=Path(posterior_dir)
     planet_dir=base_path/planet
@@ -592,15 +628,19 @@ def gen_point_cloud(planet,
 
     
     # Organize output cloud
-    lnlike_arr = np.full_like(seps_mas,lnlike) # ln likelihood
-    epochs_mjd_arr = np.full_like(seps_mas,epochs.value[:,np.newaxis])
-    distance_pc = np.full_like(seps_mas,1000.0/parallax)
-    mass_arr = np.full_like(seps_mas,m_pl_mjup)
-    pl_rad_arr = np.full_like(seps_mas,r_pl_rjup)
-    incdeg_arr = np.full_like(seps_mas,inc_deg)
+    distance_pc = 1000.0/parallax
+    epochs = epochs.value
+
+    if standard_arr_size:
+        distance_pc = np.full_like(seps_mas,1000.0/parallax)
+        lnlike = np.full_like(seps_mas,lnlike) # ln likelihood
+        epochs = np.full_like(seps_mas,epochs[:,np.newaxis])
+        m_pl_mjup = np.full_like(seps_mas,m_pl_mjup)
+        r_pl_rjup = np.full_like(seps_mas,r_pl_rjup)
+        inc_deg = np.full_like(seps_mas,inc_deg)
 
     point_cloud = {
-        'epoch_mjd' : epochs_mjd_arr,
+        'epoch_mjd' : epochs,
         'sep_mas' : seps_mas,
         'raoff_mas' : raoff_mas,
         'deoff_mas' : deoff_mas,
@@ -608,11 +648,10 @@ def gen_point_cloud(planet,
         'z_au' : z_au,
         'orbital_radius_au' : r_au,
         'phase_angle_deg' : phase_angle_deg,
-        'lambert_phase' : lambert_phase,
-        'm_pl_mjup' : mass_arr,
-        'r_pl_rjup' : pl_rad_arr,
-        'inc_deg' : incdeg_arr,
-        'ln_likelihood' : lnlike_arr,
+        'm_pl_mjup' : m_pl_mjup,
+        'r_pl_rjup' : r_pl_rjup,
+        'inc_deg' : inc_deg,
+        'ln_likelihood' : lnlike,
         'dist_pc' : distance_pc
     }
 
@@ -1074,8 +1113,6 @@ def is_detectable(seps,fc,contrast_curve):
     args = np.argmin(np.abs(seps[:,np.newaxis]-concurve_seps),axis=1)
     limiting_fcs = concurve_fcs[args]
     return fc >= limiting_fcs
-
-
 
 
 def main():
