@@ -8,7 +8,7 @@ from orbitize.kepler import calc_orbit
 from astropy import units as u
 from pathlib import Path
 import matplotlib.pyplot as plt
-import os, pickle, warnings, argparse, io
+import os, pickle, warnings, argparse, io, glob
 
 
 # Display names for prettier output
@@ -492,9 +492,28 @@ def load_point_cloud(planet,
     return point_cloud
 
 
-def gen_point_cloud(planet,
+def load_posteriors(planet,
+                    posterior_dir='orbit_fits',
+                    format="radvel"
+                    ):
+    planet_dir=os.path.join(posterior_dir,planet)
+
+    if format=='radvel':
+        files=list(glob.glob(os.path.join(planet_dir,"*.csv.bz2")))
+        if len(files)==0:
+            raise UserWarning(f"Error: No posterior data found for {planet} in {planet_dir}")
+        if len(files)>1:
+            raise UserWarning(f"Multiple posterior data files found for {planet} in {planet_dir}")
+        print(f"Loading posterior data from {files[0]}...")
+        df=pd.read_csv(files[0])
+    else:
+        raise UserWarning("Only radvel posterior format is currently configured!")
+
+    return df
+
+
+def gen_point_cloud(planet, post_df,
                   params=None, #override default planet params
-                  posterior_dir='orbit_fits',
                   output_dir='.',
                   start_date='2027-01-01',
                   end_date='2027-06-30',
@@ -506,17 +525,11 @@ def gen_point_cloud(planet,
                   out_fname=None,
                   standard_arr_size=False):
     
-    base_path=Path(posterior_dir)
-    planet_dir=base_path/planet
-    files=list(planet_dir.glob("*.csv.bz2"))
-    if not files:
-        raise UserWarning(f"Error: No posterior data found for {planet} in {planet_dir}")
-    if len(files)>1:
-        raise UserWarning(f"Multiple posterior data files found for {planet} in {planet_dir}")
-    print(f"Loading posterior data from {files[0]}...")
-    df=pd.read_csv(files[0])
+
+
+
     if nsamp=='all':
-        nsamp=len(df)
+        nsamp=len(post_df)
         print(f"Using all {nsamp} posterior samples")
 
     print()
@@ -577,7 +590,7 @@ def gen_point_cloud(planet,
         raise ValueError("Error: End date must be after start date")
 
     print(f"Sampling {nsamp} orbits from posterior...")
-    df_sample=df.sample(nsamp,replace=True) # TODO: Consider if replace=True is the right choice statistically? -Ell
+    df_sample=post_df.sample(nsamp,replace=True) # TODO: Consider if replace=True is the right choice statistically? -Ell
 
     n_epochs=int((t_end.mjd-t_start.mjd)/time_interval)+1
     epochs=Time(np.linspace(t_start.mjd,t_end.mjd,n_epochs),format="mjd")
@@ -602,8 +615,7 @@ def gen_point_cloud(planet,
     phase_angle_rad=np.arccos(z_au/r_au)
     phase_angle_deg=np.degrees(phase_angle_rad)
 
-    lambert_phase=(np.sin(phase_angle_rad)+(np.pi-phase_angle_rad)*np.cos(phase_angle_rad))/np.pi
-
+    
     m_pl_mjup=m_pl*(u.M_sun/u.M_jup).to('')
     m_pl_mearth=m_pl*(u.M_sun/u.M_earth).to('')
 
@@ -668,30 +680,30 @@ def gen_point_cloud(planet,
     return point_cloud
 
 
-def gen_summary_csv(planet,params,
-                  posterior_dir='orbit_fits',
-                  output_dir='.',
-                  start_date='2027-01-01',
-                  end_date='2027-06-30',
-                  time_interval=1,
-                  inc_mode='random',
-                  inc_params=None,
-                  override_lan=0.,
-                  nsamp='all',
-                  output=None,
-                  plot=True,
-                  show_plots=False):
+def gen_summary_csv(planet,
+                    point_cloud,
+                    output_dir='.',
+                    output=None,
+                    # plot=True,
+                    # show_plots=False
+                    ):
+    
 
+    m_pl_mjup = point_cloud['m_pl_mjup']
     mass_median=np.median(m_pl_mjup)
     mass_16th=np.percentile(m_pl_mjup,16)
     mass_84th=np.percentile(m_pl_mjup,84)
     mass_err_lower=mass_median-mass_16th
     mass_err_upper=mass_84th-mass_median
+
+    r_pl_rjup = point_cloud['r_pl_rjup']
     rad_median=np.median(r_pl_rjup)
     rad_16th=np.percentile(r_pl_rjup,16)
     rad_84th=np.percentile(r_pl_rjup,84)
     rad_err_lower=rad_median-rad_16th
     rad_err_upper=rad_84th-rad_median
+
+    inc_deg = point_cloud['inc_deg']
     inc_median=np.median(inc_deg)
     inc_16th=np.percentile(inc_deg,16)
     inc_84th=np.percentile(inc_deg,84)
@@ -702,13 +714,13 @@ def gen_summary_csv(planet,params,
     print()
 
     # This is where we weight the posteriors by lnlike
-
-
-
+    lnlike = point_cloud['ln_likelihood']
+    if lnlike.ndim==2: lnlike = lnlike[0]
     weights=np.exp(lnlike-np.max(lnlike))
     weights=weights/np.sum(weights)
 
     # Compute percentiles, mean, and std for all quantities
+    seps = point_cloud['sep_mas']
     med_sep=weighted_percentile(seps,weights,50)
     low_sep=weighted_percentile(seps,weights,16)
     high_sep=weighted_percentile(seps,weights,84)
@@ -717,15 +729,8 @@ def gen_summary_csv(planet,params,
     mean_sep=weighted_mean(seps,weights)
     std_sep=weighted_std(seps,weights)
 
-    # med_rad_au=med_sep*distance_pc/1000.0
-    # low_rad_au=low_sep*distance_pc/1000.0
-    # high_rad_au=high_sep*distance_pc/1000.0
-    # low_rad_au_95=low_sep_95*distance_pc/1000.0
-    # high_rad_au_95=high_sep_95*distance_pc/1000.0
-    # mean_rad_au=mean_sep*distance_pc/1000.0
-    # std_rad_au=std_sep*distance_pc/1000.0
-
     # 3D orbital radius statistics
+    r_au = point_cloud['orbital_radius_au']
     med_r_au=weighted_percentile(r_au,weights,50)
     low_r_au=weighted_percentile(r_au,weights,16)
     high_r_au=weighted_percentile(r_au,weights,84)
@@ -734,6 +739,7 @@ def gen_summary_csv(planet,params,
     mean_r_au=weighted_mean(r_au,weights)
     std_r_au=weighted_std(r_au,weights)
 
+    phase_angle_deg = point_cloud['phase_angle_deg']
     med_phase=weighted_percentile(phase_angle_deg,weights,50)
     low_phase=weighted_percentile(phase_angle_deg,weights,16)
     high_phase=weighted_percentile(phase_angle_deg,weights,84)
@@ -742,6 +748,8 @@ def gen_summary_csv(planet,params,
     mean_phase=weighted_mean(phase_angle_deg,weights)
     std_phase=weighted_std(phase_angle_deg,weights)
 
+    phase_angle_rad = phase_angle_deg * np.pi / 180.
+    lambert_phase = (np.sin(phase_angle_rad)+(np.pi-phase_angle_rad)*np.cos(phase_angle_rad))/np.pi
     med_lambert_phase=weighted_percentile(lambert_phase,weights,50)
     low_lambert_phase=weighted_percentile(lambert_phase,weights,16)
     high_lambert_phase=weighted_percentile(lambert_phase,weights,84)
@@ -750,6 +758,7 @@ def gen_summary_csv(planet,params,
     mean_lambert_phase=weighted_mean(lambert_phase,weights)
     std_lambert_phase=weighted_std(lambert_phase,weights)
 
+    true_anomaly = point_cloud['true_anom_deg']
     true_anomaly_deg=np.degrees(true_anomaly)
     true_anomaly_deg=true_anomaly_deg%360
     med_nu=weighted_percentile(true_anomaly_deg,weights,50)
@@ -759,6 +768,13 @@ def gen_summary_csv(planet,params,
     high_nu_95=weighted_percentile(true_anomaly_deg,weights,97.5)
     mean_nu=weighted_mean(true_anomaly_deg,weights)
     std_nu=weighted_std(true_anomaly_deg,weights)
+
+    if point_cloud['epoch_mjd'].ndim == 2:
+        epochs = Time(point_cloud['epoch_mjd'][:,0],format='mjd')
+    else:
+        epochs = Time(point_cloud['epoch_mjd'],format='mjd')
+    start_date = epochs.iso[0][:10]
+    end_date = epochs.iso[-1][:10]
 
     csv_data=pd.DataFrame({
         'date_iso':epochs.iso,
@@ -800,8 +816,8 @@ def gen_summary_csv(planet,params,
         'true_anomaly_deg_median':med_nu,
         'true_anomaly_deg_16th':low_nu,
         'true_anomaly_deg_84th':high_nu,
-        'true_anomaly_deg_2.5th':low_nu,
-        'true_anomaly_deg_97.5th':high_nu,
+        'true_anomaly_deg_2.5th':low_nu_95,
+        'true_anomaly_deg_97.5th':high_nu_95,
         'true_anomaly_deg_mean':mean_nu,
         'true_anomaly_deg_std':std_nu,
     })
@@ -811,59 +827,34 @@ def gen_summary_csv(planet,params,
         planet_name=planet.replace("_","")
         output_file=f"{planet_name}_separations_{start_date}_to_{end_date}.csv"
     else:
-        output_file=output
+        output_file=output.split('.')[0] + '.csv'
 
     output_fpath=os.path.join(output_dir,output_file)
     print(f"Writing output to {output_fpath}...")
     with open(output_fpath,'w') as f:
-        f.write(f"# Planet: {display_names[planet]}\n")
-        f.write(f"# Date range: {start_date} to {end_date}\n")
-        f.write(f"# Time interval: {time_interval} days\n")
-        f.write(f"# Inclination: {inc_display}\n")
-        f.write(f"# Number of posterior samples: {nsamp}\n")
-        f.write(f"# Number of epochs: {n_epochs}\n")
-        f.write(f"#\n")
-        f.write(f"# System parameters:\n")
-        f.write(f"# Distance: {distance_pc:.2f} pc (parallax: {params['plx']:.2f} +/- {params['plx_err']:.2f} mas)\n")
-        f.write(f"#\n")
-        f.write(f"# Derived parameters:\n")
-        f.write(f"# Planet mass: {mass_median:.3f} +{mass_err_upper:.3f}/-{mass_err_lower:.3f} M_Jup\n")
-        f.write(
-            f"# Planet radius: {rad_median:.3f} +{rad_err_upper:.3f}/-{rad_err_lower:.3f} R_Jup\n")
-        f.write(
-            f"# Inclination distribution: {inc_median:.2f} deg (median), [{inc_16th:.2f}, {inc_84th:.2f}] deg (16th-84th percentile)\n")
-        f.write("#\n")
         csv_data.to_csv(f,index=False)
 
-    print(f"Output saved to {output_fpath}")
-    print(f"\nSummary:")
-    print(f"  Planet: {display_names[planet]}")
-    print(f"  Distance: {distance_pc:.2f} pc")
-    print(f"  Epochs: {n_epochs}")
-    print(
-        f"  Separation range: {med_sep.min():.2f} - {med_sep.max():.2f} mas")
+    # # Generate plots if requested
+    # if plot:
+    #     print("\nGenerating plots...")
+    #     output_prefix=output_fpath.replace('.csv','')
+    #     plot_orbital_parameters(
+    #         csv_data,
+    #         display_names[planet],
+    #         output_prefix,
+    #         df_sample=df_sample,
+    #         params=params,
+    #         # override_inc=override_inc,
+    #         override_lan=override_lan,
+    #         # user_inc_mean=user_inc_mean,
+    #         # user_inc_sig=user_inc_sig,
+    #         start_date=start_date,
+    #         end_date=end_date,
+    #         fig_ext='pdf',
+    #         show_plots=show_plots
+        # )
 
-    # Generate plots if requested
-    if plot:
-        print("\nGenerating plots...")
-        output_prefix=output_fpath.replace('.csv','')
-        plot_orbital_parameters(
-            csv_data,
-            display_names[planet],
-            output_prefix,
-            df_sample=df_sample,
-            params=params,
-            # override_inc=override_inc,
-            override_lan=override_lan,
-            # user_inc_mean=user_inc_mean,
-            # user_inc_sig=user_inc_sig,
-            start_date=start_date,
-            end_date=end_date,
-            fig_ext='pdf',
-            show_plots=show_plots
-        )
-
-    return df_sample,csv_data
+    return csv_data
 
 
 def plot_orbital_parameters(csv_data,planet_name,output_prefix,
@@ -1245,18 +1236,18 @@ def main():
     inc_mode,inc_value,inc_uncertainty=parse_inclination(args.inclination)
     inc_params=[inc_value,inc_uncertainty]
 
-    df_samples,csv_data=gen_orbit_csv(args.planet,params,
-                                      args.posterior_dir,
-                                      output_dir,
-                                      args.start_date,
-                                      args.end_date,
-                                      args.time_interval,
-                                      inc_mode,
-                                      inc_params,
-                                      override_lan,
-                                      args.nsamp,
-                                      output,
-                                      args.plot)
+    # df_samples,csv_data=gen_summary_csv(args.planet,params,
+    #                                   args.posterior_dir,
+    #                                   output_dir,
+    #                                   args.start_date,
+    #                                   args.end_date,
+    #                                   args.time_interval,
+    #                                   inc_mode,
+    #                                   inc_params,
+    #                                   override_lan,
+    #                                   args.nsamp,
+    #                                   output,
+    #                                   args.plot)
 
 
 if __name__=="__main__":

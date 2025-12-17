@@ -14,5 +14,16 @@ def test_is_detectable():
     assert np.all(expected_out == is_detectable(test_seps,test_fcs,test_concurve))
 
 
+def test_parse_inclination():
+    
+    res = parse_inclination("random")
+    assert res==('random',None,None)
+    
+    res = parse_inclination("gaussian")   
+    assert res == ('gaussian',None,None)
+
+    
+
 if __name__=='__main__':
-    test_is_detectable()
+    # test_is_detectable()
+    test_parse_inclination()
