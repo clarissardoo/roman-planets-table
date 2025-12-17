@@ -369,7 +369,8 @@ def gen_orbit_csv(planet,params,
                   override_lan=0.,
                   nsamp='all',
                   output=None,
-                  plot=True):
+                  plot=True,
+                  show_plots=False):
     base_path=Path(posterior_dir)
     planet_dir=base_path/planet
     files=list(planet_dir.glob("*.csv.bz2"))
@@ -517,13 +518,13 @@ def gen_orbit_csv(planet,params,
     std_sep=weighted_std(seps,weights)
 
     distance_pc=1000.0/params["plx"]
-    med_rad_au=med_sep*distance_pc/1000.0
-    low_rad_au=low_sep*distance_pc/1000.0
-    high_rad_au=high_sep*distance_pc/1000.0
-    low_rad_au_95=low_sep_95*distance_pc/1000.0
-    high_rad_au_95=high_sep_95*distance_pc/1000.0
-    mean_rad_au=mean_sep*distance_pc/1000.0
-    std_rad_au=std_sep*distance_pc/1000.0
+    # med_rad_au=med_sep*distance_pc/1000.0
+    # low_rad_au=low_sep*distance_pc/1000.0
+    # high_rad_au=high_sep*distance_pc/1000.0
+    # low_rad_au_95=low_sep_95*distance_pc/1000.0
+    # high_rad_au_95=high_sep_95*distance_pc/1000.0
+    # mean_rad_au=mean_sep*distance_pc/1000.0
+    # std_rad_au=std_sep*distance_pc/1000.0
 
     # 3D orbital radius statistics
     med_r_au=weighted_percentile(r_au,weights,50)
@@ -533,14 +534,6 @@ def gen_orbit_csv(planet,params,
     high_r_au_95=weighted_percentile(r_au,weights,97.5)
     mean_r_au=weighted_mean(r_au,weights)
     std_r_au=weighted_std(r_au,weights)
-
-    med_r_mas=weighted_percentile(r_mas,weights,50)
-    low_r_mas=weighted_percentile(r_mas,weights,16)
-    high_r_mas=weighted_percentile(r_mas,weights,84)
-    low_r_mas_95=weighted_percentile(r_mas,weights,2.5)
-    high_r_mas_95=weighted_percentile(r_mas,weights,97.5)
-    mean_r_mas=weighted_mean(r_mas,weights)
-    std_r_mas=weighted_std(r_mas,weights)
 
     med_phase=weighted_percentile(phase_angle_deg,weights,50)
     low_phase=weighted_percentile(phase_angle_deg,weights,16)
@@ -649,7 +642,7 @@ def gen_orbit_csv(planet,params,
     print(f"  Distance: {distance_pc:.2f} pc")
     print(f"  Epochs: {n_epochs}")
     print(
-        f"  Separation range: {med_sep.min():.2f} - {med_sep.max():.2f} mas ({med_rad_au.min():.2f} - {med_rad_au.max():.2f} AU)")
+        f"  Separation range: {med_sep.min():.2f} - {med_sep.max():.2f} mas")
 
     # Generate plots if requested
     if plot:
@@ -667,7 +660,8 @@ def gen_orbit_csv(planet,params,
             # user_inc_sig=user_inc_sig,
             start_date=start_date,
             end_date=end_date,
-            fig_ext='pdf'
+            fig_ext='pdf',
+            show_plots=show_plots
         )
 
     return df_sample,csv_data
@@ -838,14 +832,14 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
     ax2.set_title('3D Orbital Radius',fontsize=12,pad=10)
 
     ax2.fill_between(years,
-                     csv_data['separation_au_2.5th'],
-                     csv_data['separation_au_97.5th'],
+                     csv_data['orbital_radius_au_2.5th'],
+                     csv_data['orbital_radius_au_97.5th'],
                      color=c_fill_95,alpha=0.3,label='95% CI')
     ax2.fill_between(years,
-                     csv_data['separation_au_16th'],
-                     csv_data['separation_au_84th'],
+                     csv_data['orbital_radius_au_16th'],
+                     csv_data['orbital_radius_au_84th'],
                      color=c_fill_68,alpha=0.5,label='68% CI')
-    ax2.plot(years,csv_data['separation_au_median'],'-',
+    ax2.plot(years,csv_data['orbital_radius_au_median'],'-',
              color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
 
     ax2.set_ylabel('Orbital Radius (AU)',fontsize=11,fontweight='bold')
