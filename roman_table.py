@@ -9,7 +9,107 @@ from astropy import units as u
 from pathlib import Path
 import argparse
 import matplotlib.pyplot as plt
-import os
+import os, pickle, warnings
+
+
+# Display names for prettier output
+display_names={
+    "47_UMa":"47 UMa c",
+    "55_Cnc":"55 Cancri d",
+    "eps_Eri":"Eps Eri b",
+    "HD_87883":"HD 87883 b",
+    "HD_114783":"HD 114783 c",
+    "HD_134987":"HD 134987 c",
+    "HD_154345":"HD 154345 b",
+    "HD_160691":"HD 160691 e",
+    "HD_190360":"HD 190360 b",
+    "HD_217107":"HD 217107 c",
+    "pi_Men":"Pi Men b",
+    "ups_And":"Ups And d",
+    "HD_192310":"HD 192310 c",
+}
+
+
+orbit_params={
+    "47_UMa":{
+        "basis":"per tc secosw sesinw k",
+        "m0":1.0051917028549999,"m0_err":0.0468882076437500,
+        "plx":72.452800,"plx_err":0.150701,
+        "n_planets":3,"pl_num":2,"g_mag":4.866588,
+    },
+    "55_Cnc":{
+        "basis":"per tc secosw sesinw k",
+        "m0":0.905,"m0_err":0.015,
+        "plx":79.4274000,"plx_err":0.0776646,
+        "n_planets":5,"pl_num":3,"g_mag":5.732681,
+    },
+    "eps_Eri":{
+        "basis":"per tc secosw sesinw k",
+        "m0":0.82,"m0_err":0.02,
+        "plx":312.219000,"plx_err":0.467348,
+        "n_planets":1,"pl_num":1,"g_mag":3.465752,"inc_mean":78.810,"inc_sig":29.340
+    },
+    "HD_87883":{
+        "basis":"per tc secosw sesinw k",
+        "m0":0.810,"m0_err":0.091,
+        "plx":54.6421000,"plx_err":0.0369056,
+        "n_planets":1,"pl_num":1,"g_mag":7.286231,"inc_mean":25.45,"inc_sig":1.61
+    },
+    "HD_114783":{
+        "basis":"per tc secosw sesinw k",
+        "m0":0.90,"m0_err":0.04,
+        "plx":47.4482000,"plx_err":0.0637202,
+        "n_planets":2,"pl_num":2,"g_mag":7.330857,"inc_mean":159,"inc_sig":6
+    },
+    "HD_134987":{
+        "basis":"per tc secosw sesinw k",
+        "m0":1.0926444945650000,"m0_err":0.0474835459017250,
+        "plx":38.1678000,"plx_err":0.0746519,
+        "n_planets":2,"pl_num":2,"g_mag":6.302472,
+    },
+    "HD_154345":{
+        "basis":"per tc secosw sesinw k",
+        "m0":0.88,"m0_err":0.09,
+        "plx":54.6636000,"plx_err":0.0212277,
+        "n_planets":1,"pl_num":1,"g_mag":6.583667,"inc_mean":69,"inc_sig":13
+    },
+    "HD_160691":{
+        "basis":"per tc secosw sesinw k",
+        "m0":1.13,"m0_err":0.02,
+        "plx":64.082,"plx_err":0.120162,
+        "n_planets":4,"pl_num":4,"g_mag":4.942752,
+    },
+    "HD_190360":{
+        "basis":"per tc secosw sesinw k",
+        "m0":1.0,"m0_err":0.1,
+        "plx":62.4443000,"plx_err":0.0616881,
+        "n_planets":2,"pl_num":1,"g_mag":5.552787,"inc_mean":80.2,"inc_sig":23.2
+    },
+    "HD_217107":{
+        "basis":"per tc secosw sesinw k",
+        "m0":1.05963082882500,"m0_err":0.04470613802572,
+        "plx":49.8170000,"plx_err":0.0573616,
+        "n_planets":2,"pl_num":2,"g_mag":5.996743,"inc_mean":89.3,"inc_sig":9.0
+    },
+    "pi_Men":{
+        "basis":"per tc secosw sesinw k",
+        "m0":1.10,"m0_err":0.14,
+        "plx":54.705200,"plx_err":0.067131,
+        "n_planets":1,"pl_num":1,"g_mag":5.511580,"inc_mean":54.436,"inc_sig":5.945
+    },
+    "ups_And":{
+        "basis":"per tc secosw sesinw k",
+        "m0":1.29419667430000,"m0_err":0.04122482369025,
+        "plx":74.571100,"plx_err":0.349118,
+        "n_planets":3,"pl_num":3,"g_mag":3.966133,"inc_mean":23.758,"inc_sig":1.316
+    },
+    "HD_192310":{
+        "basis":"per tc secosw sesinw k",
+        "m0":0.84432448757250,"m0_err":0.02820926681885,
+        "plx":113.648000,"plx_err":0.118606,
+        "n_planets":2,"pl_num":2,"g_mag":5.481350
+    },
+}
 
 
 def compute_sep(
@@ -160,20 +260,20 @@ def compute_sep(
         Y=np.sqrt(1-ecc**2)*np.sin(EA)
 
         # 3D position in AU
-        x_au=(B*X+G*Y)
-        y_au=(A*X+F*Y)
-        z_au=(C*X+H*Y)
+        X_au=(B*X+G*Y)
+        Y_au=(A*X+F*Y)
+        Z_au=(C*X+H*Y)
 
         # Convert to mas
-        x_mas[i,:]=x_au*parallax
-        y_mas[i,:]=y_au*parallax
-        z_mas[i,:]=z_au*parallax
+        x_mas[i,:]=X_au*parallax
+        y_mas[i,:]=Y_au*parallax
+        z_mas[i,:]=Z_au*parallax
 
     # 3D orbital radius
     r_au=np.sqrt(x_mas**2+y_mas**2+z_mas**2)/parallax  #AU
-    r_mas=np.sqrt(x_mas**2+y_mas**2+z_mas**2)  # mas
+    z_au=z_mas/parallax  #AU
 
-    return seps,raoff,deoff,m_pl,inc,true_anomaly,z_mas,r_au,r_mas
+    return seps,raoff,deoff,m_pl,inc,true_anomaly,z_au,r_au,parallax
 
 
 def weighted_percentile(data,weights,percentile):
@@ -358,7 +458,7 @@ def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
     return raoff,deoff,best_idx
 
 
-def gen_orbit_csv(planet,params,
+def gen_point_cloud(planet,params,
                   posterior_dir='orbit_fits',
                   output_dir='.',
                   start_date='2027-01-01',
@@ -368,15 +468,15 @@ def gen_orbit_csv(planet,params,
                   inc_params=None,
                   override_lan=0.,
                   nsamp='all',
-                  output=None,
-                  plot=True,
-                  show_plots=False):
+                  out_fname=None):
+    
     base_path=Path(posterior_dir)
     planet_dir=base_path/planet
     files=list(planet_dir.glob("*.csv.bz2"))
     if not files:
         raise UserWarning(f"Error: No posterior data found for {planet} in {planet_dir}")
-
+    if len(files)>1:
+        raise UserWarning(f"Multiple posterior data files found for {planet} in {planet_dir}")
     print(f"Loading posterior data from {files[0]}...")
     df=pd.read_csv(files[0])
     if nsamp=='all':
@@ -438,14 +538,15 @@ def gen_orbit_csv(planet,params,
         raise ValueError("Error: End date must be after start date")
 
     print(f"Sampling {nsamp} orbits from posterior...")
-    df_sample=df.sample(nsamp,replace=True)
+    df_sample=df.sample(nsamp,replace=True) # TODO: Consider if replace=True is the right choice statistically? -Ell
 
     n_epochs=int((t_end.mjd-t_start.mjd)/time_interval)+1
     epochs=Time(np.linspace(t_start.mjd,t_end.mjd,n_epochs),format="mjd")
 
-    print(f"Computing separations for {n_epochs} epochs...")
+    print(f"Generating point cloud for {n_epochs} epochs...")
 
-    seps,raoff,deoff,m_pl,inc,true_anomaly,z_mas,r_au,r_mas=compute_sep(
+    # output shape of each array is (n_epochs,nsamp)
+    seps_mas,raoff_mas,deoff_mas,m_pl,inc,true_anomaly,z_au,r_au,parallax=compute_sep(
         df_sample,epochs,
         params["basis"],params["m0"],params["m0_err"],
         params["plx"],params["plx_err"],
@@ -459,7 +560,7 @@ def gen_orbit_csv(planet,params,
     )
 
     # Phase angle calculation using 3D radius
-    phase_angle_rad=np.arccos(z_mas/r_mas)
+    phase_angle_rad=np.arccos(z_au/r_au)
     phase_angle_deg=np.degrees(phase_angle_rad)
 
     lambert_phase=(np.sin(phase_angle_rad)+(np.pi-phase_angle_rad)*np.cos(phase_angle_rad))/np.pi
@@ -479,6 +580,66 @@ def gen_orbit_csv(planet,params,
     r_pl_rjup=r_pl_rearth*(u.R_earth/u.R_jup).to('')
 
     inc_deg=np.degrees(inc)
+
+    # Get lnlike for weighting the posteriors
+    myBasis=Basis(params["basis"],params["n_planets"])
+    df_synth=myBasis.to_synth(df_sample)
+    lnlike=df_synth["lnprobability"].values    
+
+    
+    # Organize output cloud
+    lnlike_arr = np.full_like(seps_mas,lnlike) # ln likelihood
+    epochs_mjd_arr = np.full_like(seps_mas,epochs.value[:,np.newaxis])
+    distance_pc = np.full_like(seps_mas,1000.0/parallax)
+    mass_arr = np.full_like(seps_mas,m_pl_mjup)
+    pl_rad_arr = np.full_like(seps_mas,r_pl_rjup)
+    incdeg_arr = np.full_like(seps_mas,inc_deg)
+
+    point_cloud = {
+        'epoch_mjd' : epochs_mjd_arr,
+        'sep_mas' : seps_mas,
+        'raoff_mas' : raoff_mas,
+        'deoff_mas' : deoff_mas,
+        'true_anom_deg' : true_anomaly,
+        'z_au' : z_au,
+        'orbital_radius_au' : r_au,
+        'phase_angle_deg' : phase_angle_deg,
+        'lambert_phase' : lambert_phase,
+        'm_pl_mjup' : mass_arr,
+        'r_pl_rjup' : pl_rad_arr,
+        'inc_deg' : incdeg_arr,
+        'ln_likelihood' : lnlike_arr,
+        'dist_pc' : distance_pc
+    }
+
+    # Save pickle
+    if out_fname is None:
+        planet_name=planet.replace("_","")
+        output_file=f"{planet_name}_{start_date}_to_{end_date}_PointCloud.pkl"
+    else:
+        output_file = out_fname.split('.')[0] + '_PointCloud.pkl'
+    output_fpath=os.path.join(output_dir,output_file)    
+    print(f'Saving point cloud to {output_fpath}')
+    with open(output_fpath,'wb') as f:
+        pickle.dump(point_cloud,f)
+
+    return point_cloud
+
+
+def gen_summary_csv(planet,params,
+                  posterior_dir='orbit_fits',
+                  output_dir='.',
+                  start_date='2027-01-01',
+                  end_date='2027-06-01',
+                  time_interval=1,
+                  inc_mode='random',
+                  inc_params=None,
+                  override_lan=0.,
+                  nsamp='all',
+                  output=None,
+                  plot=True,
+                  show_plots=False):
+
     mass_median=np.median(m_pl_mjup)
     mass_16th=np.percentile(m_pl_mjup,16)
     mass_84th=np.percentile(m_pl_mjup,84)
@@ -500,10 +661,7 @@ def gen_orbit_csv(planet,params,
 
     # This is where we weight the posteriors by lnlike
 
-    # Get lnlike for weighting the posteriors
-    myBasis=Basis(params["basis"],params["n_planets"])
-    df_synth=myBasis.to_synth(df_sample)
-    lnlike=df_synth["lnprobability"].values
+
 
     weights=np.exp(lnlike-np.max(lnlike))
     weights=weights/np.sum(weights)
@@ -517,7 +675,6 @@ def gen_orbit_csv(planet,params,
     mean_sep=weighted_mean(seps,weights)
     std_sep=weighted_std(seps,weights)
 
-    distance_pc=1000.0/params["plx"]
     # med_rad_au=med_sep*distance_pc/1000.0
     # low_rad_au=low_sep*distance_pc/1000.0
     # high_rad_au=high_sep*distance_pc/1000.0
@@ -915,107 +1072,11 @@ def is_detectable(seps,fc,contrast_curve):
     return fc >= limiting_fcs
 
 
-# Display names for prettier output
-display_names={
-    "47_UMa":"47 UMa c",
-    "55_Cnc":"55 Cancri d",
-    "eps_Eri":"Eps Eri b",
-    "HD_87883":"HD 87883 b",
-    "HD_114783":"HD 114783 c",
-    "HD_134987":"HD 134987 c",
-    "HD_154345":"HD 154345 b",
-    "HD_160691":"HD 160691 e",
-    "HD_190360":"HD 190360 b",
-    "HD_217107":"HD 217107 c",
-    "pi_Men":"Pi Men b",
-    "ups_And":"Ups And d",
-    "HD_192310":"HD 192310 c",
-}
-
-
-orbit_params={
-    "47_UMa":{
-        "basis":"per tc secosw sesinw k",
-        "m0":1.0051917028549999,"m0_err":0.0468882076437500,
-        "plx":72.452800,"plx_err":0.150701,
-        "n_planets":3,"pl_num":2,"g_mag":4.866588,
-    },
-    "55_Cnc":{
-        "basis":"per tc secosw sesinw k",
-        "m0":0.905,"m0_err":0.015,
-        "plx":79.4274000,"plx_err":0.0776646,
-        "n_planets":5,"pl_num":3,"g_mag":5.732681,
-    },
-    "eps_Eri":{
-        "basis":"per tc secosw sesinw k",
-        "m0":0.82,"m0_err":0.02,
-        "plx":312.219000,"plx_err":0.467348,
-        "n_planets":1,"pl_num":1,"g_mag":3.465752,"inc_mean":78.810,"inc_sig":29.340
-    },
-    "HD_87883":{
-        "basis":"per tc secosw sesinw k",
-        "m0":0.810,"m0_err":0.091,
-        "plx":54.6421000,"plx_err":0.0369056,
-        "n_planets":1,"pl_num":1,"g_mag":7.286231,"inc_mean":25.45,"inc_sig":1.61
-    },
-    "HD_114783":{
-        "basis":"per tc secosw sesinw k",
-        "m0":0.90,"m0_err":0.04,
-        "plx":47.4482000,"plx_err":0.0637202,
-        "n_planets":2,"pl_num":2,"g_mag":7.330857,"inc_mean":159,"inc_sig":6
-    },
-    "HD_134987":{
-        "basis":"per tc secosw sesinw k",
-        "m0":1.0926444945650000,"m0_err":0.0474835459017250,
-        "plx":38.1678000,"plx_err":0.0746519,
-        "n_planets":2,"pl_num":2,"g_mag":6.302472,
-    },
-    "HD_154345":{
-        "basis":"per tc secosw sesinw k",
-        "m0":0.88,"m0_err":0.09,
-        "plx":54.6636000,"plx_err":0.0212277,
-        "n_planets":1,"pl_num":1,"g_mag":6.583667,"inc_mean":69,"inc_sig":13
-    },
-    "HD_160691":{
-        "basis":"per tc secosw sesinw k",
-        "m0":1.13,"m0_err":0.02,
-        "plx":64.082,"plx_err":0.120162,
-        "n_planets":4,"pl_num":4,"g_mag":4.942752,
-    },
-    "HD_190360":{
-        "basis":"per tc secosw sesinw k",
-        "m0":1.0,"m0_err":0.1,
-        "plx":62.4443000,"plx_err":0.0616881,
-        "n_planets":2,"pl_num":1,"g_mag":5.552787,"inc_mean":80.2,"inc_sig":23.2
-    },
-    "HD_217107":{
-        "basis":"per tc secosw sesinw k",
-        "m0":1.05963082882500,"m0_err":0.04470613802572,
-        "plx":49.8170000,"plx_err":0.0573616,
-        "n_planets":2,"pl_num":2,"g_mag":5.996743,"inc_mean":89.3,"inc_sig":9.0
-    },
-    "pi_Men":{
-        "basis":"per tc secosw sesinw k",
-        "m0":1.10,"m0_err":0.14,
-        "plx":54.705200,"plx_err":0.067131,
-        "n_planets":1,"pl_num":1,"g_mag":5.511580,"inc_mean":54.436,"inc_sig":5.945
-    },
-    "ups_And":{
-        "basis":"per tc secosw sesinw k",
-        "m0":1.29419667430000,"m0_err":0.04122482369025,
-        "plx":74.571100,"plx_err":0.349118,
-        "n_planets":3,"pl_num":3,"g_mag":3.966133,"inc_mean":23.758,"inc_sig":1.316
-    },
-    "HD_192310":{
-        "basis":"per tc secosw sesinw k",
-        "m0":0.84432448757250,"m0_err":0.02820926681885,
-        "plx":113.648000,"plx_err":0.118606,
-        "n_planets":2,"pl_num":2,"g_mag":5.481350
-    },
-}
 
 
 def main():
+    warnings.warn("Running this code via the .py script is outdated! Please reference the python notebooks for the latest workflow.")
+    
     parser=argparse.ArgumentParser(
         description='Generate CSV files with projected angular separations for RV-detected exoplanets.'
     )
