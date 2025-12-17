@@ -909,6 +909,23 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
     plt.close('all')
 
 
+def is_detectable(seps,fc,contrast_curve):
+    """
+    TODO:
+    - Make sure IWA and OWA are handled appropriately
+    - Think about linear interpolation for v2
+    """
+    seps = np.array(seps)
+    fc = np.array(fc)
+
+    # get the position of the closest separation in the contrast curve for each given sep
+    concurve_seps = contrast_curve[0]
+    concurve_fcs = contrast_curve[1]
+    args = np.argmin(np.abs(seps[:,np.newaxis]-concurve_seps),axis=1)
+    limiting_fcs = concurve_fcs[args]
+    return fc >= limiting_fcs
+
+
 # Display names for prettier output
 display_names={
     "47_UMa":"47 UMa c",
@@ -925,6 +942,7 @@ display_names={
     "ups_And":"Ups And d",
     "HD_192310":"HD 192310 c",
 }
+
 
 orbit_params={
     "47_UMa":{
