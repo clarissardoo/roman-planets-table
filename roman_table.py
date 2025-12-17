@@ -458,7 +458,8 @@ def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
     return raoff,deoff,best_idx
 
 
-def gen_point_cloud(planet,params,
+def gen_point_cloud(planet,
+                  params=None, #override default planet params
                   posterior_dir='orbit_fits',
                   output_dir='.',
                   start_date='2027-01-01',
@@ -489,6 +490,9 @@ def gen_point_cloud(planet,params,
     print(f"  Planet: {display_names[planet]}")
     print(f"  Date range: {start_date} to {end_date}")
     print(f"  Time interval: {time_interval} days")
+
+    if params is None:
+        params = orbit_params[planet]
 
     if inc_mode=='user_gaussian':
         inc_value,inc_uncertainty=inc_params
