@@ -1127,7 +1127,12 @@ def is_detectable(seps,fc,contrast_curve):
     # get the position of the closest separation in the contrast curve for each given sep
     concurve_seps = contrast_curve[0]
     concurve_fcs = contrast_curve[1]
-    args = np.argmin(np.abs(seps[:,np.newaxis]-concurve_seps),axis=1)
+    if seps.ndim == 1:
+        args = np.argmin(np.abs(seps[np.newaxis]-concurve_seps),axis=1)
+    elif seps.ndim == 2:
+        args = np.argmin(np.abs(seps[:,:,np.newaxis]-concurve_seps),axis=2)
+    else:
+        raise UserWarning('separation and flux contrast should be 1D or 2D array.')
     limiting_fcs = concurve_fcs[args]
     return fc >= limiting_fcs
 
