@@ -6,109 +6,132 @@ from radvel.utils import Msini
 from orbitize.basis import tp_to_tau
 from orbitize.kepler import calc_orbit
 from astropy import units as u
-from pathlib import Path
 import matplotlib.pyplot as plt
-import os, pickle, warnings, argparse, io, glob
-
-
-# Display names for prettier output
-display_names={
-    "47_UMa":"47 UMa c",
-    "55_Cnc":"55 Cancri d",
-    "eps_Eri":"Eps Eri b",
-    "HD_87883":"HD 87883 b",
-    "HD_114783":"HD 114783 c",
-    "HD_134987":"HD 134987 c",
-    "HD_154345":"HD 154345 b",
-    "HD_160691":"HD 160691 e",
-    "HD_190360":"HD 190360 b",
-    "HD_217107":"HD 217107 c",
-    "pi_Men":"Pi Men b",
-    "ups_And":"Ups And d",
-    "HD_192310":"HD 192310 c",
-}
+import os, pickle, warnings, argparse, glob
 
 
 orbit_params={
-    "47_UMa":{
+    "47_UMa_c":{
+        "star":"47_UMa",'pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":1.0051917028549999,"m0_err":0.0468882076437500,
         "plx":72.452800,"plx_err":0.150701,
         "n_planets":3,"pl_num":2,"g_mag":4.866588,
     },
-    "55_Cnc":{
+    "47_UMa_b":{
+        "star":"47_UMa",'pl_letter':'b',
+        "basis":"per tc secosw sesinw k",
+        "m0":1.0051917028549999,"m0_err":0.0468882076437500,
+        "plx":72.452800,"plx_err":0.150701,
+        "n_planets":3,"pl_num":1,"g_mag":4.866588,
+    },
+    "47_UMa_d":{
+        "star":"47_UMa",'pl_letter':'d',
+        "basis":"per tc secosw sesinw k",
+        "m0":1.0051917028549999,"m0_err":0.0468882076437500,
+        "plx":72.452800,"plx_err":0.150701,
+        "n_planets":3,"pl_num":3,"g_mag":4.866588,
+    },
+    "55_Cnc_d":{
+        'star':"55_Cnc",'pl_letter':'d',
         "basis":"per tc secosw sesinw k",
         "m0":0.905,"m0_err":0.015,
         "plx":79.4274000,"plx_err":0.0776646,
         "n_planets":5,"pl_num":3,"g_mag":5.732681,
     },
-    "eps_Eri":{
+    "eps_Eri_b":{
+        'star':'eps_Eri','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":0.82,"m0_err":0.02,
         "plx":312.219000,"plx_err":0.467348,
-        "n_planets":1,"pl_num":1,"g_mag":3.465752,"inc_mean":78.810,"inc_sig":29.340
+        "n_planets":1,"pl_num":1,"g_mag":3.465752,
+        "inc_mean":78.810,"inc_sig":29.340,
     },
-    "HD_87883":{
+    "HD_87883_b":{
+        'star':'HD_87883','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":0.810,"m0_err":0.091,
         "plx":54.6421000,"plx_err":0.0369056,
-        "n_planets":1,"pl_num":1,"g_mag":7.286231,"inc_mean":25.45,"inc_sig":1.61
+        "n_planets":1,"pl_num":1,"g_mag":7.286231,
+        "inc_mean":25.45,"inc_sig":1.61,
     },
-    "HD_114783":{
+    "HD_114783_c":{
+        'star':'HD_114783','pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":0.90,"m0_err":0.04,
         "plx":47.4482000,"plx_err":0.0637202,
-        "n_planets":2,"pl_num":2,"g_mag":7.330857,"inc_mean":159,"inc_sig":6
+        "n_planets":2,"pl_num":2,"g_mag":7.330857,
+        "inc_mean":159,"inc_sig":6,
     },
-    "HD_134987":{
+    "HD_134987_c":{
+        'star':'HD_134987','pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":1.0926444945650000,"m0_err":0.0474835459017250,
         "plx":38.1678000,"plx_err":0.0746519,
         "n_planets":2,"pl_num":2,"g_mag":6.302472,
     },
-    "HD_154345":{
+    "HD_154345_b":{
+        'star':'HD_154345','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":0.88,"m0_err":0.09,
         "plx":54.6636000,"plx_err":0.0212277,
-        "n_planets":1,"pl_num":1,"g_mag":6.583667,"inc_mean":69,"inc_sig":13
+        "n_planets":1,"pl_num":1,"g_mag":6.583667,
+        "inc_mean":69,"inc_sig":13,
+        'pl_letter':'b',
     },
-    "HD_160691":{
+    "HD_160691_c":{
+        'star':'HD_160691','pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":1.13,"m0_err":0.02,
         "plx":64.082,"plx_err":0.120162,
         "n_planets":4,"pl_num":4,"g_mag":4.942752,
     },
-    "HD_190360":{
+    "HD_190360_b":{
+        'star':'HD_190360','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":1.0,"m0_err":0.1,
         "plx":62.4443000,"plx_err":0.0616881,
-        "n_planets":2,"pl_num":1,"g_mag":5.552787,"inc_mean":80.2,"inc_sig":23.2
+        "n_planets":2,"pl_num":1,"g_mag":5.552787,
+        "inc_mean":80.2,"inc_sig":23.2,
     },
-    "HD_217107":{
+    "HD_217107_c":{
+        'star':'HD_217107','pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":1.05963082882500,"m0_err":0.04470613802572,
         "plx":49.8170000,"plx_err":0.0573616,
-        "n_planets":2,"pl_num":2,"g_mag":5.996743,"inc_mean":89.3,"inc_sig":9.0
+        "n_planets":2,"pl_num":2,"g_mag":5.996743,
+        "inc_mean":89.3,"inc_sig":9.0,
     },
-    "pi_Men":{
+    "pi_Men_b":{
+        'star':'pi_Men','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":1.10,"m0_err":0.14,
         "plx":54.705200,"plx_err":0.067131,
-        "n_planets":1,"pl_num":1,"g_mag":5.511580,"inc_mean":54.436,"inc_sig":5.945
+        "n_planets":1,"pl_num":1,"g_mag":5.511580,
+        "inc_mean":54.436,"inc_sig":5.945,
     },
-    "ups_And":{
+    "ups_And_d":{
+        'star':'ups_And','pl_letter':'d',
         "basis":"per tc secosw sesinw k",
         "m0":1.29419667430000,"m0_err":0.04122482369025,
         "plx":74.571100,"plx_err":0.349118,
-        "n_planets":3,"pl_num":3,"g_mag":3.966133,"inc_mean":23.758,"inc_sig":1.316
+        "n_planets":3,"pl_num":3,"g_mag":3.966133,
+        "inc_mean":23.758,"inc_sig":1.316,
     },
-    "HD_192310":{
+    "HD_192310_c":{
+        'star':'HD_192310','pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":0.84432448757250,"m0_err":0.02820926681885,
         "plx":113.648000,"plx_err":0.118606,
-        "n_planets":2,"pl_num":2,"g_mag":5.481350
+        "n_planets":2,"pl_num":2,"g_mag":5.481350,
     },
 }
+
+
+def display_name(planet_name): # Display names for prettier output
+    replaced_underscores = " ".join(planet_name.split("_"))
+    capitalized = replaced_underscores[0].upper()+replaced_underscores[1:]
+    return capitalized
 
 
 def compute_sep(
@@ -492,11 +515,15 @@ def load_point_cloud(planet,
     return point_cloud
 
 
-def load_posteriors(planet,
+def load_posteriors(planet, params=None,
                     posterior_dir='orbit_fits',
                     format="radvel"
                     ):
-    planet_dir=os.path.join(posterior_dir,planet)
+    
+    if params is None:
+        params = orbit_params[planet]
+    star = params['star']
+    planet_dir=os.path.join(posterior_dir,star)
 
     if format=='radvel':
         files=list(glob.glob(os.path.join(planet_dir,"*.csv.bz2")))
@@ -535,7 +562,7 @@ def gen_point_cloud(planet, post_df,
     print()
     print("-"*60)
     print(f"Configuration:")
-    print(f"  Planet: {display_names[planet]}")
+    print(f"  Planet: {display_name(planet)}")
     print(f"  Date range: {start_date} to {end_date}")
     print(f"  Time interval: {time_interval} days")
 
@@ -857,7 +884,7 @@ def gen_summary_csv(planet,
     return csv_data
 
 
-def plot_orbital_parameters(csv_data,planet_name,output_prefix,
+def plot_orbital_parameters(planet,csv_data,output_prefix,
                             df_sample=None,params=None,override_inc=None,
                             override_lan=None,user_inc_mean=None,user_inc_sig=None,
                             start_date=None,end_date=None,figsize=None,fig_ext='png',
@@ -938,7 +965,7 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
             inc_str='random'
 
         lan_str='random' if override_lan is None else f'{override_lan}°'
-        ax_orbit.set_title(f'{planet_name}: Orbital Trajectory\n(i={inc_str}, Ω={lan_str})',
+        ax_orbit.set_title(f'{display_name(planet)}: Orbital Trajectory\n(i={inc_str}, Ω={lan_str})',
                            fontsize=14,fontweight='bold',pad=15)
         ax_orbit.set_xlabel('RA Offset [mas]',fontsize=13,fontweight='bold')
         ax_orbit.set_ylabel('Dec Offset [mas]',fontsize=13,fontweight='bold')
@@ -982,10 +1009,10 @@ def plot_orbital_parameters(csv_data,planet_name,output_prefix,
     end_year=years[-1]
 
     if not plot_2d:
-        fig.suptitle(f'{planet_name} - Orbital Parameters ({start_year:.1f} → {end_year:.1f})',
+        fig.suptitle(f'{display_name(planet)} - Orbital Parameters ({start_year:.1f} → {end_year:.1f})',
                      fontsize=16,fontweight='bold',y=0.995)
     else:
-        fig.suptitle(f'{planet_name} - Orbital Analysis ({start_year:.1f} → {end_year:.1f})',
+        fig.suptitle(f'{display_name(planet)} - Orbital Analysis ({start_year:.1f} → {end_year:.1f})',
                      fontsize=16,fontweight='bold',y=0.995)
 
     # Plot 1: Separation (mas)
@@ -1150,7 +1177,7 @@ def main():
     # Planet selection
     if args.planet is None:
         print("Available planets:")
-        for i,(key,name) in enumerate(display_names.items(),1):
+        for i,(key,name) in enumerate(orbit_params.items(),1):
             print(f"  {i:2d}. {key:15s} - {name}")
         print()
 
