@@ -710,10 +710,7 @@ def gen_point_cloud(planet, post_df,
 def gen_summary_csv(planet,
                     point_cloud,
                     output_dir='.',
-                    output=None,
-                    # plot=True,
-                    # show_plots=False
-                    ):
+                    output=None):
     
 
     m_pl_mjup = point_cloud['m_pl_mjup']
@@ -740,6 +737,41 @@ def gen_summary_csv(planet,
     print(f"Inclination: {inc_median:.2f} [{inc_16th:.2f}, {inc_84th:.2f}] degrees")
     print()
 
+    if point_cloud['epoch_mjd'].ndim == 2:
+        epochs = Time(point_cloud['epoch_mjd'][:,0],format='mjd')
+    else:
+        epochs = Time(point_cloud['epoch_mjd'],format='mjd')
+    start_date = epochs.iso[0][:10]
+    end_date = epochs.iso[-1][:10]
+    
+    csv_data_dict = {
+        'date_iso':epochs.iso,
+        'mjd':epochs.mjd,
+        'decimal_year':epochs.decimalyear,
+        }
+    
+    if 'detection_probability' in point_cloud.keys():
+        csv_data_dict['det_probability'] = point_cloud['detection_probability']
+    
+    # Prep some arrays
+    phase_angle_rad = point_cloud['phase_angle_deg'] * np.pi / 180.
+    lambert_phase = (np.sin(phase_angle_rad)+(np.pi-phase_angle_rad)*np.cos(phase_angle_rad))/np.pi
+
+    labeled_data = {
+        'separation_mas' : point_cloud['sep_mas'],
+        'orbital_radius_au' : point_cloud['orbital_radius_au'],
+        'phase_angle_deg' : point_cloud['phase_angle_deg'],
+        'lambert_phase' : lambert_phase,
+        'true_anomaly' : np.degrees(point_cloud['true_anom_deg'])%360,
+    }
+
+    # Keys which may not be present
+    if 'phi_x_a' in point_cloud.keys():
+        labeled_data['phi_x_a'] = point_cloud['phi_x_a']
+    if 'flux_contrast' in point_cloud.keys():
+        labeled_data['flux_contrast'] = point_cloud['flux_contrast']
+
+
     # This is where we weight the posteriors by lnlike
     lnlike = point_cloud['ln_likelihood']
     if lnlike.ndim==2: lnlike = lnlike[0]
@@ -747,107 +779,16 @@ def gen_summary_csv(planet,
     weights=weights/np.sum(weights)
 
     # Compute percentiles, mean, and std for all quantities
-    seps = point_cloud['sep_mas']
-    med_sep=weighted_percentile(seps,weights,50)
-    low_sep=weighted_percentile(seps,weights,16)
-    high_sep=weighted_percentile(seps,weights,84)
-    low_sep_95=weighted_percentile(seps,weights,2.5)
-    high_sep_95=weighted_percentile(seps,weights,97.5)
-    mean_sep=weighted_mean(seps,weights)
-    std_sep=weighted_std(seps,weights)
+    for label, arr in labeled_data.items():
+        csv_data_dict[f'{label}_median'] = weighted_percentile(arr,weights,50)
+        csv_data_dict[f'{label}_16th'] = weighted_percentile(arr,weights,16)
+        csv_data_dict[f'{label}_84th'] = weighted_percentile(arr,weights,84)
+        csv_data_dict[f'{label}_2.5th'] = weighted_percentile(arr,weights,2.5)
+        csv_data_dict[f'{label}_97.5th'] = weighted_percentile(arr,weights,97.5)
+        csv_data_dict[f'{label}_mean'] = weighted_mean(arr,weights)
+        csv_data_dict[f'{label}_std'] = weighted_std(arr,weights)
 
-    # 3D orbital radius statistics
-    r_au = point_cloud['orbital_radius_au']
-    med_r_au=weighted_percentile(r_au,weights,50)
-    low_r_au=weighted_percentile(r_au,weights,16)
-    high_r_au=weighted_percentile(r_au,weights,84)
-    low_r_au_95=weighted_percentile(r_au,weights,2.5)
-    high_r_au_95=weighted_percentile(r_au,weights,97.5)
-    mean_r_au=weighted_mean(r_au,weights)
-    std_r_au=weighted_std(r_au,weights)
-
-    phase_angle_deg = point_cloud['phase_angle_deg']
-    med_phase=weighted_percentile(phase_angle_deg,weights,50)
-    low_phase=weighted_percentile(phase_angle_deg,weights,16)
-    high_phase=weighted_percentile(phase_angle_deg,weights,84)
-    low_phase_95=weighted_percentile(phase_angle_deg,weights,2.5)
-    high_phase_95=weighted_percentile(phase_angle_deg,weights,97.5)
-    mean_phase=weighted_mean(phase_angle_deg,weights)
-    std_phase=weighted_std(phase_angle_deg,weights)
-
-    phase_angle_rad = phase_angle_deg * np.pi / 180.
-    lambert_phase = (np.sin(phase_angle_rad)+(np.pi-phase_angle_rad)*np.cos(phase_angle_rad))/np.pi
-    med_lambert_phase=weighted_percentile(lambert_phase,weights,50)
-    low_lambert_phase=weighted_percentile(lambert_phase,weights,16)
-    high_lambert_phase=weighted_percentile(lambert_phase,weights,84)
-    low_lambert_phase_95=weighted_percentile(lambert_phase,weights,2.5)
-    high_lambert_phase_95=weighted_percentile(lambert_phase,weights,97.5)
-    mean_lambert_phase=weighted_mean(lambert_phase,weights)
-    std_lambert_phase=weighted_std(lambert_phase,weights)
-
-    true_anomaly = point_cloud['true_anom_deg']
-    true_anomaly_deg=np.degrees(true_anomaly)
-    true_anomaly_deg=true_anomaly_deg%360
-    med_nu=weighted_percentile(true_anomaly_deg,weights,50)
-    low_nu=weighted_percentile(true_anomaly_deg,weights,16)
-    high_nu=weighted_percentile(true_anomaly_deg,weights,84)
-    low_nu_95=weighted_percentile(true_anomaly_deg,weights,2.5)
-    high_nu_95=weighted_percentile(true_anomaly_deg,weights,97.5)
-    mean_nu=weighted_mean(true_anomaly_deg,weights)
-    std_nu=weighted_std(true_anomaly_deg,weights)
-
-    if point_cloud['epoch_mjd'].ndim == 2:
-        epochs = Time(point_cloud['epoch_mjd'][:,0],format='mjd')
-    else:
-        epochs = Time(point_cloud['epoch_mjd'],format='mjd')
-    start_date = epochs.iso[0][:10]
-    end_date = epochs.iso[-1][:10]
-
-    csv_data=pd.DataFrame({
-        'date_iso':epochs.iso,
-        'mjd':epochs.mjd,
-
-        'decimal_year':epochs.decimalyear,
-        'separation_mas_median':med_sep,
-        'separation_mas_16th':low_sep,
-        'separation_mas_84th':high_sep,
-        'separation_mas_2.5th':low_sep_95,
-        'separation_mas_97.5th':high_sep_95,
-        'separation_mas_mean':mean_sep,
-        'separation_mas_std':std_sep,
-
-        'orbital_radius_au_median':med_r_au,
-        'orbital_radius_au_16th':low_r_au,
-        'orbital_radius_au_84th':high_r_au,
-        'orbital_radius_au_2.5th':low_r_au_95,
-        'orbital_radius_au_97.5th':high_r_au_95,
-        'orbital_radius_au_mean':mean_r_au,
-        'orbital_radius_au_std':std_r_au,
-
-        'phase_angle_deg_median':med_phase,
-        'phase_angle_deg_16th':low_phase,
-        'phase_angle_deg_84th':high_phase,
-        'phase_angle_deg_2.5th':low_phase_95,
-        'phase_angle_deg_97.5th':high_phase_95,
-        'phase_angle_deg_mean':mean_phase,
-        'phase_angle_deg_std':std_phase,
-
-        'lambert_phase_median':med_lambert_phase,
-        'lambert_phase_16th':low_lambert_phase,
-        'lambert_phase_84th':high_lambert_phase,
-        'lambert_phase_2.5th':low_lambert_phase_95,
-        'lambert_phase_97.5th':high_lambert_phase_95,
-        'lambert_phase_mean':mean_lambert_phase,
-        'lambert_phase_std':std_lambert_phase,
-
-        'true_anomaly_deg_median':med_nu,
-        'true_anomaly_deg_16th':low_nu,
-        'true_anomaly_deg_84th':high_nu,
-        'true_anomaly_deg_2.5th':low_nu_95,
-        'true_anomaly_deg_97.5th':high_nu_95,
-        'true_anomaly_deg_mean':mean_nu,
-        'true_anomaly_deg_std':std_nu,
-    })
+    csv_data=pd.DataFrame(csv_data_dict)
 
     # output file name
     if output is None:
@@ -933,10 +874,32 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     # Determine if we can plot 2D orbits
     plot_2d=(df_sample is not None and params is not None)
 
+    # Set plot location indices
+    n_param_plots = 3
+    sep = 0
+    orb_rad = 1
+    phase = 2
+
+    if 'det_probability' in csv_data.columns:
+        n_param_plots += 1
+        sep += 1
+        orb_rad += 1
+        phase += 1
+        det = 0
+        plot_det = True
+    else: plot_det = False
+
+    if 'flux_contrast_median' in csv_data.columns:
+        n_param_plots += 1
+        fc = phase + 1
+        plot_fc = True
+    else: plot_fc = False
+
+
     if plot_2d:
         if figsize is None: figsize=(20,12)
         fig=plt.figure(figsize=figsize)
-        gs=fig.add_gridspec(4,2,width_ratios=[1.2,1],hspace=0.3,wspace=0.3)
+        gs=fig.add_gridspec(n_param_plots,2,width_ratios=[1.2,1],hspace=0.3,wspace=0.3)
 
         # 2d orbit trajectory
         epochs_2d=Time(np.linspace(Time(start_date).mjd,Time(end_date).mjd,100),format="mjd")
@@ -1003,7 +966,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     else:
         # Create figure with only time series (4 subplots stacked)
         if figsize is None: figsize=(14,12)
-        fig,axes=plt.subplots(4,1,figsize=figsize)
+        fig,axes=plt.subplots(n_param_plots,1,figsize=figsize)
 
     start_year=years[0]
     end_year=years[-1]
@@ -1016,7 +979,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
                      fontsize=16,fontweight='bold',y=0.995)
 
     # Plot 1: Separation (mas)
-    ax1=axes[0]
+    ax1=axes[sep]
     min_sep=csv_data['separation_mas_16th'].min()
     max_sep=csv_data['separation_mas_84th'].max()
     ax1.set_title(f'Sky-Projected Angular Separation (1σ: {min_sep:.0f}-{max_sep:.0f} mas)',
@@ -1045,8 +1008,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     ax1.tick_params(axis='both',which='major',labelsize=10)
 
     # Plot 2: Orbital Radius (AU)
-    ax2=axes[1]
-    ax2.set_title('3D Orbital Radius',fontsize=12,pad=10)
+    ax2=axes[orb_rad]
 
     ax2.fill_between(years,
                      csv_data['orbital_radius_au_2.5th'],
@@ -1065,8 +1027,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     ax2.tick_params(axis='both',which='major',labelsize=10)
 
     # Plot 3: Phase Angle (deg)
-    ax3=axes[2]
-    ax3.set_title('Phase Angle',fontsize=12,pad=10)
+    ax3=axes[phase]
 
     ax3.fill_between(years,
                      csv_data['phase_angle_deg_2.5th'],
@@ -1080,35 +1041,56 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
              color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
 
     ax3.set_ylabel('Phase Angle (°)',fontsize=11,fontweight='bold')
+    ax3.set_ylim(0,180)
     ax3.grid(True,alpha=0.25,linestyle=':')
     ax3.legend(loc='best',fontsize=9,framealpha=0.9)
     ax3.tick_params(axis='both',which='major',labelsize=10)
 
-    # Plot 4: True Anomaly (deg)
-    ax4=axes[3]
-    ax4.set_title('True Anomaly',fontsize=12,pad=10)
+    # Optional Plot: Detection Probability
+    if plot_det:
+        ax_detprob=axes[det]
 
-    ax4.fill_between(years,
-                     csv_data['true_anomaly_deg_16th'],
-                     csv_data['true_anomaly_deg_84th'],
-                     color=c_fill_68,alpha=0.5,label='68% CI')
-    ax4.plot(years,csv_data['true_anomaly_deg_median'],'-',
-             color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
+        ax_detprob.plot(years,csv_data['det_probability'],'-',
+                color=c_median,linewidth=2.5,marker='o',markersize=3)
 
-    ax4.set_ylabel('True Anomaly (°)',fontsize=11,fontweight='bold')
-    ax4.set_xlabel('Year',fontsize=11,fontweight='bold')
-    ax4.grid(True,alpha=0.25,linestyle=':')
-    ax4.legend(loc='best',fontsize=9,framealpha=0.9)
-    ax4.tick_params(axis='both',which='major',labelsize=10)
+        ax_detprob.set_ylabel('Detection Probability',fontsize=11,fontweight='bold')
+        ax_detprob.set_ylim(0,1)
+        ax_detprob.grid(True,alpha=0.25,linestyle=':')
+        ax_detprob.legend(loc='best',fontsize=9,framealpha=0.9)
+        ax_detprob.tick_params(axis='both',which='major',labelsize=10)
+
+    # Optional Plot: Flux Contrast
+    if plot_fc:
+        ax_fc=axes[fc]
+        ax_fc.fill_between(years,
+                        csv_data['flux_contrast_2.5th'],
+                        csv_data['flux_contrast_97.5th'],
+                        color=c_fill_95,alpha=0.3,label='95% CI')
+        ax_fc.fill_between(years,
+                        csv_data['flux_contrast_16th'],
+                        csv_data['flux_contrast_84th'],
+                        color=c_fill_68,alpha=0.5,label='68% CI')
+        ax_fc.plot(years,csv_data['flux_contrast_median'],'-',
+                color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
+        plt.semilogy()
+        ax_fc.set_ylabel('Flux Contrast',fontsize=11,fontweight='bold')
+        ax_fc.set_xlabel('Year',fontsize=11,fontweight='bold')
+        ax_fc.set_ylim(1e-9,1e-7)
+        ax_fc.grid(True,alpha=0.25,linestyle=':')
+        ax_fc.legend(loc='best',fontsize=9,framealpha=0.9)
+        ax_fc.tick_params(axis='both',which='major',labelsize=10)
 
     # Ensure all x-axes show the same range
     for ax in axes:
         ax.set_xlim(years[0],years[-1])
 
+    axes[-1].set_xlabel('Year',fontsize=11,fontweight='bold')
+    
+
     plt.tight_layout()
 
     plot_filename=f"{output_prefix}_orbital_params.{fig_ext}"
-    plt.savefig(plot_filename,dpi=300,bbox_inches='tight')
+    plt.savefig(plot_filename,dpi=150,bbox_inches='tight')
     print(f"Plot saved to {plot_filename}")
     if show_plots:
         plt.show()
