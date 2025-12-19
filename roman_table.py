@@ -752,6 +752,10 @@ def gen_summary_csv(planet,
     
     if 'detection_probability' in point_cloud.keys():
         csv_data_dict['det_probability'] = point_cloud['detection_probability']
+    if 'GB_not_observable' in point_cloud.keys():
+        csv_data_dict['GB_not_observable'] = point_cloud['GB_not_observable']
+    if 'targ_observable' in point_cloud.keys():
+        csv_data_dict['targ_observable'] = point_cloud['targ_observable']
     
     # Prep some arrays
     phase_angle_rad = point_cloud['phase_angle_deg'] * np.pi / 180.
@@ -788,6 +792,8 @@ def gen_summary_csv(planet,
         csv_data_dict[f'{label}_mean'] = weighted_mean(arr,weights)
         csv_data_dict[f'{label}_std'] = weighted_std(arr,weights)
 
+
+
     csv_data=pd.DataFrame(csv_data_dict)
 
     # output file name
@@ -823,6 +829,26 @@ def gen_summary_csv(planet,
         # )
 
     return csv_data
+
+
+def load_summary_csv(planet,
+                     i_dir='.',
+                     start_date='2027-01-01',
+                     end_date='2027-06-30',
+                     output=None):
+    
+    if output is None:
+        planet_name=planet.replace("_","")
+        csv_file=f"{planet_name}_separations_{start_date}_to_{end_date}.csv"
+    else:
+        csv_file=output.split('.')[0] + '.csv'
+
+    csv_fpath=os.path.join(i_dir,csv_file)
+    print(f"Reading orbit summary csv from{csv_fpath}...")
+    csv_data = pd.read_csv(csv_fpath)
+
+    return csv_data
+    
 
 
 def plot_orbital_parameters(planet,csv_data,output_prefix,
