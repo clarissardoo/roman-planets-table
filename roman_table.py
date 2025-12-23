@@ -855,7 +855,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
                             df_sample=None,params=None,override_inc=None,
                             override_lan=None,user_inc_mean=None,user_inc_sig=None,
                             start_date=None,end_date=None,figsize=None,fig_ext='png',
-                            show_plots=False):
+                            show_plots=False,band=None):
     """
     Create plots including 2D orbits and time-series parameters.
 
@@ -874,6 +874,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         figsize (tuple of float): Figure size in inches
         fig_ext (str): file extension for saved figure, defaults to 'png'
         show_plots (bool): display the figure in output stream, defaults False
+        band (int): CGI wavelength band (1, 3, or 4) for plot title.
     """
     # Convert decimal years for plotting
     years=csv_data['decimal_year'].values
@@ -997,11 +998,8 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     start_year=years[0]
     end_year=years[-1]
 
-    if not plot_2d:
-        fig.suptitle(f'{display_name(planet)} - Orbital Parameters ({start_year:.1f} → {end_year:.1f})',
-                     fontsize=16,fontweight='bold',y=0.995)
-    else:
-        fig.suptitle(f'{display_name(planet)} - Orbital Analysis ({start_year:.1f} → {end_year:.1f})',
+    band_str = f' Band {band}' if not (band is None) else ''
+    fig.suptitle(f'{display_name(planet)}{band_str} ({start_year:.1f} → {end_year:.1f})',
                      fontsize=16,fontweight='bold',y=0.995)
 
     # Plot 1: Separation (mas)
