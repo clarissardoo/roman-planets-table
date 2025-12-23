@@ -135,106 +135,162 @@ def display_name(planet_name): # Display names for prettier output
 
 
 def compute_sep(
-        df,epochs,basis,m0,m0_err,plx,plx_err,n_planets=1,pl_num=1,
+        df,epochs,basis=None,m0=None,m0_err=None,plx=None,plx_err=None,n_planets=1,pl_num=1,
         override_inc=None,override_lan=None,inc_mean=None,inc_sig=None,
-        user_inc_mean=None,user_inc_sig=None
+        user_inc_mean=None,user_inc_sig=None,posterior_type=None
 ):
     """
-    Computes a sky-projected angular separation posterior given a
-    RadVel-computed DataFrame.
+    Computes a sky-projected angular separation posterior given either a
+    RadVel or Orbitize posterior DataFrame.
 
     Args:
-        df (pd.DataFrame): Radvel-computed posterior (in any orbital basis)
-        epochs (np.array of astropy.time.Time): epochs at which to compute
-            separations
-        basis (str): basis string of input posterior (see
-            radvel.basis.BASIS_NAMES` for the full list of possibilities).
-        m0 (float): median of primary mass distribution (assumed Gaussian).
-        m0_err (float): 1sigma error of primary mass distribution
-            (assumed Gaussian).
-        plx (float): median of parallax distribution (assumed Gaussian).
-        plx_err: 1sigma error of parallax distribution (assumed Gaussian).
-        n_planets (int): total number of planets in RadVel posterior
-        pl_num (int): planet number used in RadVel fits (e.g. a RadVel label of
-            'per1' implies `pl_num` == 1)
-        override_inc (float or str): Fixed inclination in degrees, or None/"gaussian" for sampling
-        inc_mean (float): Mean inclination in degrees for Gaussian sampling (from orbit_params)
-        inc_sig (float): Standard deviation of inclination in degrees for Gaussian sampling (from orbit_params)
-        user_inc_mean (float): User-provided mean inclination in degrees
-        user_inc_sig (float): User-provided standard deviation of inclination in degrees
+        df (pd.DataFrame): Posterior samples (RadVel or Orbitize format)
+        epochs (np.array of astropy.time.Time): epochs at which to compute separations
+        basis (str): basis string for RadVel posteriors. Not used for Orbitize.
+        m0 (float): median of primary mass (Gaussian). Required for RadVel, optional for Orbitize.
+        m0_err (float): 1sigma error of primary mass. For RadVel posteriors.
+        plx (float): median of parallax (Gaussian). Required for RadVel, optional for Orbitize.
+        plx_err: 1sigma error of parallax. For RadVel posteriors.
+        n_planets (int): total number of planets in posterior
+        pl_num (int): planet number (e.g. 'per1' or 'sma1' implies pl_num == 1)
+        override_inc (float or str): Fixed inclination (deg) for RadVel only
+        override_lan (float): Fixed longitude of ascending node (deg) for RadVel only
+        inc_mean (float): Mean inclination (deg) for RadVel Gaussian sampling
+        inc_sig (float): Std dev inclination (deg) for RadVel Gaussian sampling
+        user_inc_mean (float): User-provided mean inclination (deg) for RadVel
+        user_inc_sig (float): User-provided std dev inclination (deg) for RadVel
+        posterior_type (str): 'radvel' or 'orbitize' (None defaults to 'radvel')
 
     Returns:
         tuple of:
-            np.array of size (len(epochs) x len(df)): sky-projected angular
-                separations [mas] at each input epoch
-            np.array: RA offsets [mas]
-            np.array: Dec offsets [mas]
-            np.array: planet masses in solar masses
-            np.array: inclinations in radians
-            np.array: true anomaly
-            np.array: z component [mas]
-            np.array: 3D orbital radius [AU]
-            np.array: 3D orbital radius [mas]
+            seps (np.array): sky-projected angular separations [mas] (n_epochs x n_samples)
+            raoff (np.array): RA offsets [mas]
+            deoff (np.array): Dec offsets [mas]
+            m_pl (np.array): planet masses [M_sun]
+            inc (np.array): inclinations [radians]
+            true_anomaly (np.array): true anomaly [radians]
+            z_au (np.array): z component [AU]
+            r_au (np.array): 3D orbital radius [AU]
+            parallax (np.array): parallax [mas]
     """
 
-    myBasis=Basis(basis,n_planets)
-    df=myBasis.to_synth(df)
     chain_len=len(df)
     tau_ref_epoch=58849
 
-    # convert RadVel posteriors -> orbitize posteriors
-    m_st=np.random.normal(m0,m0_err,size=chain_len)
-    semiamp=df['k{}'.format(pl_num)].values
-    per_day=df['per{}'.format(pl_num)].values
-    period_yr=per_day/365.25
-    ecc=df['e{}'.format(pl_num)].values
-    msini=(
-            Msini(semiamp,per_day,m_st,ecc,Msini_units='Earth')*
-            (u.M_earth/u.M_sun).to('')
-    )
+    # Set default posterior type
+    if posterior_type is None:
+        posterior_type='radvel'
 
-    #median msini for critical inclination
-    median_msini=np.median(msini)
+    if posterior_type=='orbitize':
 
-    # Handle inclination sampling
-    if user_inc_mean is not None and user_inc_sig is not None:
-        # User-provided Gaussian distribution
-        inc_deg_samples=np.random.normal(user_inc_mean,user_inc_sig,size=chain_len)
-        # Clip to valid range [0, 180] degrees
-        inc_deg_samples=np.clip(inc_deg_samples,0,180)
-        inc=np.radians(inc_deg_samples)
-    elif override_inc is not None and override_inc!="gaussian":
-        # Fixed inclination provided by user
-        inc=np.full(chain_len,np.radians(override_inc))
-    elif override_inc=="gaussian" and inc_mean is not None and inc_sig is not None:
-        # Sample from Gaussian distribution (from orbit_params)
-        inc_deg_samples=np.random.normal(inc_mean,inc_sig,size=chain_len)
-        # Clip to valid range [0, 180] degrees
-        inc_deg_samples=np.clip(inc_deg_samples,0,180)
-        inc=np.radians(inc_deg_samples)
+        print("Using Orbitize posterior format...")
+        # Extract orbital elements directly from posterior
+        sma=df[f'sma{pl_num}'].values  # AU
+        ecc=df[f'ecc{pl_num}'].values
+        inc=np.radians(df[f'inc{pl_num}'].values)*180/np.pi  # Convert to radians
+        omega_pl_rad=np.radians(df[f'aop{pl_num}'].values)*180/np.pi  # argument of periastron
+        lan=np.radians(df[f'pan{pl_num}'].values)*180/np.pi  # position angle of nodes
+        tau=df[f'tau{pl_num}'].values
+
+        # Extract stellar mass (m0)
+        if 'm0' in df.columns:
+            m_st=df['m0'].values
+        elif m0 is not None:
+            print(f"Warning: Stellar mass (m0) not in posterior, using m0={m0} from params")
+            m_st=np.full(chain_len,m0)
+        else:
+            raise ValueError("Need stellar mass (m0) in posterior or m0 parameter")
+
+        # Extract planet mass (m1, m2, m3, ...)
+        planet_mass_col=f'm{pl_num}'
+        if planet_mass_col in df.columns:
+            m_pl=df[planet_mass_col].values
+        else:
+            print(f"Warning: Planet mass ({planet_mass_col}) not found in posterior, using fallback estimate")
+            m_pl=None
+
+        # Calculate planet mass if not available
+        if m_pl is None:
+            # Use Kepler's 3rd law as rough estimate
+            period_yr=(sma**3/m_st)**(0.5)
+            m_pl=0.001*m_st  # Placeholder - 1 Jupiter mass ~0.001 M_sun
+            print(f"Warning: Using placeholder planet mass estimate")
+
+        mtot=m_st+m_pl
+
+        # Get parallax
+        if 'plx' in df.columns:
+            parallax=df['plx'].values
+        elif 'parallax' in df.columns:
+            parallax=df['parallax'].values
+        elif plx is not None:
+            parallax=np.random.normal(plx,plx_err if plx_err is not None else 0.01*plx,size=chain_len)
+        else:
+            raise ValueError("Need parallax in posterior or plx parameter")
+
     else:
-        # Default: uniform in cos(inc) random sampling with critical inclination constraint
-        # Critical inclination: where planet becomes a star (0.08 Msun)
-        crit_incrad=np.arcsin(median_msini/0.08)
-        cosi=(2.*np.random.random(size=chain_len)*np.cos(crit_incrad))-1.
-        inc=np.arccos(cosi)
 
-    m_pl=msini/np.sin(inc)
-    mtot=m_st+m_pl
-    sma=(period_yr**2*mtot)**(1/3)
-    omega_st_rad=df['w{}'.format(pl_num)].values
-    omega_pl_rad=omega_st_rad+np.pi
-    parallax=np.random.normal(plx,plx_err,size=chain_len)
+        print("Using RadVel posterior format...")
 
-    if override_lan is not None:
-        lan=np.full(chain_len,np.radians(override_lan))
-    else:
-        lan=np.random.random_sample(size=chain_len)*2.*np.pi
+        if basis is None:
+            raise ValueError("basis parameter required for RadVel posteriors")
+        if m0 is None:
+            raise ValueError("m0 parameter required for RadVel posteriors")
+        if plx is None:
+            raise ValueError("plx parameter required for RadVel posteriors")
 
-    tp_mjd=df['tp{}'.format(pl_num)].values-2400000.5
-    tau=tp_to_tau(tp_mjd,tau_ref_epoch,period_yr)
+        myBasis=Basis(basis,n_planets)
+        df=myBasis.to_synth(df)
 
-    # compute projected separation in mas
+        # convert RadVel posteriors -> orbitize posteriors
+        m_st=np.random.normal(m0,m0_err,size=chain_len)
+        semiamp=df[f'k{pl_num}'].values
+        per_day=df[f'per{pl_num}'].values
+        period_yr=per_day/365.25
+        ecc=df[f'e{pl_num}'].values
+        msini=(
+                Msini(semiamp,per_day,m_st,ecc,Msini_units='Earth')*
+                (u.M_earth/u.M_sun).to('')
+        )
+
+        # median msini for critical inclination
+        median_msini=np.median(msini)
+
+        # Handle inclination sampling for RadVel
+        if user_inc_mean is not None and user_inc_sig is not None:
+            inc_deg_samples=np.random.normal(user_inc_mean,user_inc_sig,size=chain_len)
+            inc_deg_samples=np.clip(inc_deg_samples,0,180)
+            inc=np.radians(inc_deg_samples)
+        elif override_inc is not None and override_inc!="gaussian":
+            inc=np.full(chain_len,np.radians(override_inc))
+        elif override_inc=="gaussian" and inc_mean is not None and inc_sig is not None:
+            inc_deg_samples=np.random.normal(inc_mean,inc_sig,size=chain_len)
+            inc_deg_samples=np.clip(inc_deg_samples,0,180)
+            inc=np.radians(inc_deg_samples)
+        else:
+            # Default: uniform in cos(inc) with critical inclination constraint
+            crit_incrad=np.arcsin(median_msini/0.08)
+            cosi=(2.*np.random.random(size=chain_len)*np.cos(crit_incrad))-1.
+            inc=np.arccos(cosi)
+
+        m_pl=msini/np.sin(inc)
+        mtot=m_st+m_pl
+        sma=(period_yr**2*mtot)**(1/3)
+        omega_st_rad=df[f'w{pl_num}'].values
+        omega_pl_rad=omega_st_rad+np.pi
+        parallax=np.random.normal(plx,plx_err,size=chain_len)
+
+        if override_lan is not None:
+            lan=np.full(chain_len,np.radians(override_lan))
+        else:
+            lan=np.random.random_sample(size=chain_len)*2.*np.pi
+
+        tp_mjd=df[f'tp{pl_num}'].values-2400000.5
+        tau=tp_to_tau(tp_mjd,tau_ref_epoch,period_yr)
+
+    # ==================================================================
+    # COMMON CODE - compute projected separation in mas
+    # ==================================================================
     raoff,deoff,vz=calc_orbit(
         epochs.mjd,sma,ecc,inc,
         omega_pl_rad,lan,tau,
@@ -249,7 +305,7 @@ def compute_sep(
     y_mas=np.zeros((n_epochs,chain_len))
     z_mas=np.zeros((n_epochs,chain_len))
 
-    # Thiele-Innes from my orbit_getpoints
+    # Thiele-Innes constants
     A=sma*(np.cos(omega_pl_rad)*np.cos(lan)-np.sin(omega_pl_rad)*np.sin(lan)*np.cos(inc))
     B=sma*(np.cos(omega_pl_rad)*np.sin(lan)+np.sin(omega_pl_rad)*np.cos(lan)*np.cos(inc))
     F=sma*(-np.sin(omega_pl_rad)*np.cos(lan)-np.cos(omega_pl_rad)*np.sin(lan)*np.cos(inc))
@@ -257,12 +313,20 @@ def compute_sep(
     C=sma*np.sin(omega_pl_rad)*np.sin(inc)
     H=sma*np.cos(omega_pl_rad)*np.sin(inc)
 
+    # Compute period for mean motion
+    period_yr=(sma**3/mtot)**(0.5)
+    per_day=period_yr*365.25
+
+    # Compute tp_mjd from tau if needed
+    from orbitize.basis import tau_to_tp
+    tp_mjd=tau_to_tp(tau,tau_ref_epoch,period_yr)
+
     for i in range(n_epochs):
-        # Mean anom
+        # Mean anomaly
         n_motion=2*np.pi/per_day  # mean motion (rad/day)
         M=n_motion*(epochs.mjd[i]-tp_mjd)
 
-        # eccentric anomaly from orbit_getpoints
+        # Eccentric anomaly
         EA=M+ecc*np.sin(M)+ecc**2*np.sin(2*M)/2
         for _ in range(20):
             err=EA-ecc*np.sin(EA)-M
@@ -292,11 +356,10 @@ def compute_sep(
         z_mas[i,:]=Z_au*parallax
 
     # 3D orbital radius
-    r_au=np.sqrt(x_mas**2+y_mas**2+z_mas**2)/parallax  #AU
-    z_au=z_mas/parallax  #AU
+    r_au=np.sqrt(x_mas**2+y_mas**2+z_mas**2)/parallax  # AU
+    z_au=z_mas/parallax  # AU
 
     return seps,raoff,deoff,m_pl,inc,true_anomaly,z_au,r_au,parallax
-
 
 def weighted_percentile(data,weights,percentile):
     """Compute weighted percentile given posteriors and ln-like weights from posteriors sampled"""
@@ -407,75 +470,159 @@ def parse_inclination(inc_str):
         raise ValueError(f"Invalid inclination format: '{inc_str}'")
 
 
-def compute_orbit_for_plotting(df,epochs,basis,m0,m0_err,plx,plx_err,
+def compute_orbit_for_plotting(df,epochs,basis=None,m0=None,m0_err=None,plx=None,plx_err=None,
                                n_planets=1,pl_num=1,override_inc=None,
                                override_lan=None,inc_mean=None,inc_sig=None,
-                               user_inc_mean=None,user_inc_sig=None):
+                               user_inc_mean=None,user_inc_sig=None,posterior_type='radvel'):
     """
     Compute orbit trajectories for 2D plotting (RA/Dec offsets).
     Returns the same separation data as compute_sep for plots.
+    Supports both RadVel and Orbitize posteriors.
+
+    Args:
+        df (pd.DataFrame): Posterior samples
+        epochs (astropy.time.Time): Epochs for orbit computation
+        basis (str): RadVel basis string (required for RadVel, unused for Orbitize)
+        m0 (float): Stellar mass (required for RadVel, optional for Orbitize)
+        m0_err (float): Stellar mass error (RadVel only)
+        plx (float): Parallax in mas (required for RadVel, optional for Orbitize)
+        plx_err (float): Parallax error (RadVel only)
+        n_planets (int): Number of planets in system
+        pl_num (int): Planet number
+        override_inc (float): Override inclination (RadVel only)
+        override_lan (float): Override longitude of ascending node (RadVel only)
+        inc_mean (float): Mean inclination for Gaussian sampling (RadVel only)
+        inc_sig (float): Std dev inclination for Gaussian sampling (RadVel only)
+        user_inc_mean (float): User-provided mean inclination (RadVel only)
+        user_inc_sig (float): User-provided std dev inclination (RadVel only)
+        posterior_type (str): 'radvel' or 'orbitize'
+
+    Returns:
+        tuple: (raoff, deoff, best_idx)
+            raoff: RA offsets in mas (n_epochs x n_samples)
+            deoff: Dec offsets in mas (n_epochs x n_samples)
+            best_idx: Index of best-fit orbit
     """
-    myBasis=Basis(basis,n_planets)
-    df=myBasis.to_synth(df)
     chain_len=len(df)
     tau_ref_epoch=58849
 
-    # convert RadVel posteriors -> orbitize posteriors
-    m_st=np.random.normal(m0,m0_err,size=chain_len)
-    semiamp=df['k{}'.format(pl_num)].values
-    per_day=df['per{}'.format(pl_num)].values
-    period_yr=per_day/365.25
-    ecc=df['e{}'.format(pl_num)].values
-    msini=(
-            Msini(semiamp,per_day,m_st,ecc,Msini_units='Earth')*
-            (u.M_earth/u.M_sun).to('')
-    )
+    if posterior_type=='orbitize':
 
-    # Calculate median msini for critical inclination
-    median_msini=np.median(msini)
+        print("Plotting Orbitize orbits...")
 
-    # Handle inc sampling
-    if user_inc_mean is not None and user_inc_sig is not None:
-        inc_deg_samples=np.random.normal(user_inc_mean,user_inc_sig,size=chain_len)
-        inc_deg_samples=np.clip(inc_deg_samples,0,180)
-        inc=np.radians(inc_deg_samples)
-    elif override_inc is not None and override_inc!="gaussian":
-        inc=np.full(chain_len,np.radians(override_inc))
-    elif override_inc=="gaussian" and inc_mean is not None and inc_sig is not None:
-        inc_deg_samples=np.random.normal(inc_mean,inc_sig,size=chain_len)
-        inc_deg_samples=np.clip(inc_deg_samples,0,180)
-        inc=np.radians(inc_deg_samples)
+        # Extract orbital elements directly from posterior
+        sma=df[f'sma{pl_num}'].values  # AU
+        ecc=df[f'ecc{pl_num}'].values
+        inc=np.radians(df[f'inc{pl_num}'].values)*180/np.pi  # Convert to radians
+        omega_pl_rad=np.radians(df[f'aop{pl_num}'].values)*180/np.pi  # argument of periastron
+        lan=np.radians(df[f'pan{pl_num}'].values)*180/np.pi  # position angle of nodes
+        tau=df[f'tau{pl_num}'].values
+
+        # Extract stellar mass
+        if 'm0' in df.columns:
+            m_st=df['m0'].values
+        elif m0 is not None:
+            m_st=np.full(chain_len,m0)
+        else:
+            raise ValueError("Need stellar mass (m0) in posterior or m0 parameter")
+
+        # Extract planet mass
+        planet_mass_col=f'm{pl_num}'
+        if planet_mass_col in df.columns:
+            m_pl=df[planet_mass_col].values
+        else:
+            # Fallback estimate
+            print(f"Warning: Planet mass ({planet_mass_col}) not in posterior, using estimate")
+            m_pl=0.001*m_st  # ~1 Jupiter mass
+
+        mtot=m_st+m_pl
+
+        # Get parallax
+        if 'plx' in df.columns:
+            parallax=df['plx'].values
+        elif 'parallax' in df.columns:
+            parallax=df['parallax'].values
+        elif plx is not None:
+            parallax=np.random.normal(plx,plx_err if plx_err is not None else 0.01*plx,size=chain_len)
+        else:
+            raise ValueError("Need parallax in posterior or plx parameter")
+
+        # Get best-fit index based on chi2 (lower is better)
+        if 'chi2' in df.columns:
+            best_idx=np.argmin(df['chi2'].values)
+        else:
+            best_idx=0  # Default to first sample if no chi2
+
     else:
-        # Default: uniform random sampling with critical inclination constraint
-        crit_incrad=np.arcsin(median_msini/0.08)
-        cosi=(2.*np.random.random(size=chain_len)*np.cos(crit_incrad))-1.
-        inc=np.arccos(cosi)
+        # RADVEL POSTERIORS - convert to orbitize format
+        print("Plotting RadVel orbits...")
 
-    m_pl=msini/np.sin(inc)
-    mtot=m_st+m_pl
-    sma=(period_yr**2*mtot)**(1/3)
-    omega_st_rad=df['w{}'.format(pl_num)].values
-    omega_pl_rad=omega_st_rad+np.pi
-    parallax=np.random.normal(plx,plx_err,size=chain_len)
+        if basis is None:
+            raise ValueError("basis parameter required for RadVel posteriors")
+        if m0 is None:
+            raise ValueError("m0 parameter required for RadVel posteriors")
+        if plx is None:
+            raise ValueError("plx parameter required for RadVel posteriors")
 
-    if override_lan is not None:
-        lan=np.full(chain_len,np.radians(override_lan))
-    else:
-        lan=np.random.random_sample(size=chain_len)*2.*np.pi
+        myBasis=Basis(basis,n_planets)
+        df=myBasis.to_synth(df)
 
-    tp_mjd=df['tp{}'.format(pl_num)].values-2400000.5
-    tau=tp_to_tau(tp_mjd,tau_ref_epoch,period_yr)
+        # convert RadVel posteriors -> orbitize posteriors
+        m_st=np.random.normal(m0,m0_err,size=chain_len)
+        semiamp=df[f'k{pl_num}'].values
+        per_day=df[f'per{pl_num}'].values
+        period_yr=per_day/365.25
+        ecc=df[f'e{pl_num}'].values
+        msini=(
+                Msini(semiamp,per_day,m_st,ecc,Msini_units='Earth')*
+                (u.M_earth/u.M_sun).to('')
+        )
 
-    # compute projected separation in mas
+        # Calculate median msini for critical inclination
+        median_msini=np.median(msini)
+
+        # Handle inc sampling
+        if user_inc_mean is not None and user_inc_sig is not None:
+            inc_deg_samples=np.random.normal(user_inc_mean,user_inc_sig,size=chain_len)
+            inc_deg_samples=np.clip(inc_deg_samples,0,180)
+            inc=np.radians(inc_deg_samples)
+        elif override_inc is not None and override_inc!="gaussian":
+            inc=np.full(chain_len,np.radians(override_inc))
+        elif override_inc=="gaussian" and inc_mean is not None and inc_sig is not None:
+            inc_deg_samples=np.random.normal(inc_mean,inc_sig,size=chain_len)
+            inc_deg_samples=np.clip(inc_deg_samples,0,180)
+            inc=np.radians(inc_deg_samples)
+        else:
+            # Default: uniform random sampling with critical inclination constraint
+            crit_incrad=np.arcsin(median_msini/0.08)
+            cosi=(2.*np.random.random(size=chain_len)*np.cos(crit_incrad))-1.
+            inc=np.arccos(cosi)
+
+        m_pl=msini/np.sin(inc)
+        mtot=m_st+m_pl
+        sma=(period_yr**2*mtot)**(1/3)
+        omega_st_rad=df[f'w{pl_num}'].values
+        omega_pl_rad=omega_st_rad+np.pi
+        parallax=np.random.normal(plx,plx_err,size=chain_len)
+
+        if override_lan is not None:
+            lan=np.full(chain_len,np.radians(override_lan))
+        else:
+            lan=np.random.random_sample(size=chain_len)*2.*np.pi
+
+        tp_mjd=df[f'tp{pl_num}'].values-2400000.5
+        tau=tp_to_tau(tp_mjd,tau_ref_epoch,period_yr)
+
+        # Get best-fit index based on lnprobability (higher is better)
+        lnlike=df["lnprobability"].values
+        best_idx=np.argmax(lnlike)
+
+    # COMMON CODE - compute projected separation
     raoff,deoff,vz=calc_orbit(
         epochs.mjd,sma,ecc,inc,
         omega_pl_rad,lan,tau,
         parallax,mtot,tau_ref_epoch=tau_ref_epoch
     )
-
-    # Get best-fit index (I don't use this anymore for plots)
-    lnlike=df["lnprobability"].values
-    best_idx=np.argmax(lnlike)
 
     return raoff,deoff,best_idx
 
@@ -515,29 +662,103 @@ def load_point_cloud(planet,
     return point_cloud
 
 
-def load_posteriors(planet, params=None,
+def load_posteriors(planet,params=None,
                     posterior_dir='orbit_fits',
                     format="radvel"
                     ):
-    
+    """
+    Load posterior samples from either RadVel or Orbitize format.
+
+    Args:
+        planet (str): Planet name (e.g., '47_UMa_b')
+        params (dict): Planet parameters dictionary
+        posterior_dir (str): Base directory for posteriors
+        format (str): 'radvel' or 'orbitize'
+
+    Returns:
+        pd.DataFrame: Posterior samples
+    """
+    import glob
+
     if params is None:
-        params = orbit_params[planet]
-    star = params['star']
-    planet_dir=os.path.join(posterior_dir,star)
+        params=orbit_params[planet]
+    star=params['star']
 
     if format=='radvel':
+        planet_dir=os.path.join(posterior_dir,star)
         files=list(glob.glob(os.path.join(planet_dir,"*.csv.bz2")))
+
         if len(files)==0:
             raise UserWarning(f"Error: No posterior data found for {planet} in {planet_dir}")
         if len(files)>1:
             raise UserWarning(f"Multiple posterior data files found for {planet} in {planet_dir}")
-        print(f"Loading posterior data from {files[0]}...")
+
+        print(f"Loading RadVel posterior from {files[0]}...")
         df=pd.read_csv(files[0])
+
+    elif format=='orbitize':
+        # For orbitize, files are in Roman_RV_HGCA_Orbits subdirectory
+        planet_dir=os.path.join(posterior_dir,'Roman_RV_HGCA_Orbits',star)
+
+        # Look for CSV files (both .csv and .csv.bz2)
+        files=list(glob.glob(os.path.join(planet_dir,"*.csv")))
+        files+=list(glob.glob(os.path.join(planet_dir,"*.csv.bz2")))
+
+        if len(files)==0:
+            raise UserWarning(f"Error: No posterior data found for {planet} in {planet_dir}")
+        if len(files)>1:
+            # Try to find the file that matches the planet letter
+            pl_letter=params.get('pl_letter','b')
+            matching_files=[f for f in files if pl_letter in os.path.basename(f).lower()]
+            if len(matching_files)==1:
+                files=matching_files
+            else:
+                raise UserWarning(f"Multiple posterior data files found for {planet} in {planet_dir}: {files}")
+
+        print(f"Loading Orbitize posterior from {files[0]}...")
+        df=pd.read_csv(files[0])
+
     else:
-        raise UserWarning("Only radvel posterior format is currently configured!")
+        raise UserWarning(f"Unknown posterior format: {format}")
 
     return df
 
+
+def get_likelihood_weights(df,posterior_type='radvel'):
+    """
+    Extract likelihood weights from posterior DataFrame.
+
+    Args:
+        df (pd.DataFrame): Posterior samples
+        posterior_type (str): 'radvel' or 'orbitize'
+
+    Returns:
+        np.array: Normalized weights for each sample
+    """
+
+    if posterior_type=='orbitize':
+        # Orbitize uses chi2
+        if 'chi2' in df.columns:
+            chi2=df['chi2'].values
+            # Convert chi2 to likelihood: L = exp(-chi2/2)
+            # Then normalize
+            log_like=-chi2/2
+            weights=np.exp(log_like-np.max(log_like))
+            weights=weights/np.sum(weights)
+        else:
+            print("Warning: No chi2 column found, using uniform weights")
+            weights=np.ones(len(df))/len(df)
+
+    else:  # radvel
+        if 'lnprobability' in df.columns:
+            lnlike=df['lnprobability'].values
+            weights=np.exp(lnlike-np.max(lnlike))
+            weights=weights/np.sum(weights)
+        else:
+            print("Warning: No lnprobability column found, using uniform weights")
+            weights=np.ones(len(df))/len(df)
+
+    return weights
 
 def gen_point_cloud(planet, post_df,
                   params=None, #override default planet params
@@ -550,9 +771,9 @@ def gen_point_cloud(planet, post_df,
                   override_lan=0.,
                   nsamp='all',
                   out_fname=None,
-                  standard_arr_size=False):
+                  standard_arr_size=False,
+                posterior_type='radvel'):
     
-
 
 
     if nsamp=='all':
@@ -569,7 +790,13 @@ def gen_point_cloud(planet, post_df,
     if params is None:
         params = orbit_params[planet]
 
-    if inc_mode=='user_gaussian':
+    if posterior_type=='orbitize':
+        print(f"  Inclination: from Orbitize posterior (sampled)")
+        print(f"  Ω (Omega): from Orbitize posterior (sampled)")
+        override_inc=None
+        user_inc_mean=None
+        user_inc_sig=None
+    elif inc_mode=='user_gaussian':
         inc_value,inc_uncertainty=inc_params
         print(f"  Inclination: Gaussian (μ={inc_value:.1f}°, σ={inc_uncertainty:.1f}°) [user-defined]")
         inc_display=f"{inc_value:.1f}±{inc_uncertainty:.1f}"
@@ -635,7 +862,8 @@ def gen_point_cloud(planet, post_df,
         inc_mean=params.get("inc_mean"),
         inc_sig=params.get("inc_sig"),
         user_inc_mean=user_inc_mean,
-        user_inc_sig=user_inc_sig
+        user_inc_sig=user_inc_sig,
+        posterior_type=posterior_type
     )
 
     # Phase angle calculation using 3D radius
@@ -659,11 +887,15 @@ def gen_point_cloud(planet, post_df,
 
     inc_deg=np.degrees(inc)
 
-    # Get lnlike for weighting the posteriors
-    myBasis=Basis(params["basis"],params["n_planets"])
-    df_synth=myBasis.to_synth(df_sample)
-    lnlike=df_synth["lnprobability"].values    
-
+    if posterior_type=='orbitize':
+        if 'chi2' in df_sample.columns:
+            lnlike=-df_sample['chi2'].values/2
+        else:
+            lnlike=np.zeros(len(df_sample))
+    else:
+        myBasis=Basis(params["basis"],params["n_planets"])
+        df_synth=myBasis.to_synth(df_sample)
+        lnlike=df_synth["lnprobability"].values
     
     # Organize output cloud
     distance_pc = 1000.0/parallax
@@ -848,14 +1080,13 @@ def load_summary_csv(planet,
     csv_data = pd.read_csv(csv_fpath)
 
     return csv_data
-    
 
 
 def plot_orbital_parameters(planet,csv_data,output_prefix,
                             df_sample=None,params=None,override_inc=None,
                             override_lan=None,user_inc_mean=None,user_inc_sig=None,
                             start_date=None,end_date=None,figsize=None,fig_ext='png',
-                            show_plots=False):
+                            show_plots=False,posterior_type='radvel'):
     """
     Create plots including 2D orbits and time-series parameters.
 
@@ -874,6 +1105,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         figsize (tuple of float): Figure size in inches
         fig_ext (str): file extension for saved figure, defaults to 'png'
         show_plots (bool): display the figure in output stream, defaults False
+        posterior_type (str): 'radvel' or 'orbitize'
     """
     # Convert decimal years for plotting
     years=csv_data['decimal_year'].values
@@ -901,26 +1133,27 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     plot_2d=(df_sample is not None and params is not None)
 
     # Set plot location indices
-    n_param_plots = 3
-    sep = 0
-    orb_rad = 1
-    phase = 2
+    n_param_plots=3
+    sep=0
+    orb_rad=1
+    phase=2
 
     if 'det_probability' in csv_data.columns:
-        n_param_plots += 1
-        sep += 1
-        orb_rad += 1
-        phase += 1
-        det = 0
-        plot_det = True
-    else: plot_det = False
+        n_param_plots+=1
+        sep+=1
+        orb_rad+=1
+        phase+=1
+        det=0
+        plot_det=True
+    else:
+        plot_det=False
 
     if 'flux_contrast_median' in csv_data.columns:
-        n_param_plots += 1
-        fc = phase + 1
-        plot_fc = True
-    else: plot_fc = False
-
+        n_param_plots+=1
+        fc=phase+1
+        plot_fc=True
+    else:
+        plot_fc=False
 
     if plot_2d:
         if figsize is None: figsize=(20,12)
@@ -939,21 +1172,46 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
             inc_mean=params.get("inc_mean"),
             inc_sig=params.get("inc_sig"),
             user_inc_mean=user_inc_mean,
-            user_inc_sig=user_inc_sig
+            user_inc_sig=user_inc_sig,
+            posterior_type=posterior_type
         )
 
         ax_orbit=fig.add_subplot(gs[:,0])
 
-        if user_inc_mean is not None and user_inc_sig is not None:
-            inc_str=f'{user_inc_mean:.1f}±{user_inc_sig:.1f}°'
-        elif override_inc=="gaussian" and params.get("inc_mean") is not None:
-            inc_str=f'Gaussian ({params["inc_mean"]:.1f}±{params["inc_sig"]:.1f}°)'
-        elif override_inc is not None:
-            inc_str=f'{override_inc}°'
-        else:
-            inc_str='random'
+        # Generate title strings based on posterior type
+        if posterior_type=='orbitize':
+            # For Orbitize, show statistics from posterior
+            inc_col=f'inc{params["pl_num"]}'
+            pan_col=f'pan{params["pl_num"]}'
 
-        lan_str='random' if override_lan is None else f'{override_lan}°'
+            if inc_col in df_sample.columns:
+                inc_median=np.median(df_sample[inc_col])*180/np.pi
+                inc_16=np.percentile(df_sample[inc_col],16)*180/np.pi
+                inc_84=np.percentile(df_sample[inc_col],84)*180/np.pi
+                inc_str=f'{inc_median:.1f}° [{inc_16:.1f}°-{inc_84:.1f}°]'
+            else:
+                inc_str='from posterior'
+
+            if pan_col in df_sample.columns:
+                pan_median=np.median(df_sample[pan_col])*180/np.pi
+                pan_16=np.percentile(df_sample[pan_col],16)*180/np.pi
+                pan_84=np.percentile(df_sample[pan_col],84)*180/np.pi
+                lan_str=f'{pan_median:.1f}° [{pan_16:.1f}°-{pan_84:.1f}°]'
+            else:
+                lan_str='from posterior'
+        else:
+            # For RadVel, use existing logic
+            if user_inc_mean is not None and user_inc_sig is not None:
+                inc_str=f'{user_inc_mean:.1f}±{user_inc_sig:.1f}°'
+            elif override_inc=="gaussian" and params.get("inc_mean") is not None:
+                inc_str=f'Gaussian ({params["inc_mean"]:.1f}±{params["inc_sig"]:.1f}°)'
+            elif override_inc is not None:
+                inc_str=f'{override_inc}°'
+            else:
+                inc_str='random'
+
+            lan_str='random' if override_lan is None else f'{override_lan}°'
+
         ax_orbit.set_title(f'{display_name(planet)}: Orbital Trajectory\n(i={inc_str}, Ω={lan_str})',
                            fontsize=14,fontweight='bold',pad=15)
         ax_orbit.set_xlabel('RA Offset [mas]',fontsize=13,fontweight='bold')
@@ -987,7 +1245,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         ax_orbit.tick_params(axis='both',which='major',labelsize=11)
 
         # Time series plots on right side
-        axes=[fig.add_subplot(gs[i,1]) for i in range(4)]
+        axes=[fig.add_subplot(gs[i,1]) for i in range(n_param_plots)]
 
     else:
         # Create figure with only time series (4 subplots stacked)
@@ -1077,7 +1335,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         ax_detprob=axes[det]
 
         ax_detprob.plot(years,csv_data['det_probability'],'-',
-                color=c_median,linewidth=2.5,marker='o',markersize=3)
+                        color=c_median,linewidth=2.5,marker='o',markersize=3)
 
         ax_detprob.set_ylabel('Detection Probability',fontsize=11,fontweight='bold')
         ax_detprob.set_ylim(0,1)
@@ -1089,15 +1347,15 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     if plot_fc:
         ax_fc=axes[fc]
         ax_fc.fill_between(years,
-                        csv_data['flux_contrast_2.5th'],
-                        csv_data['flux_contrast_97.5th'],
-                        color=c_fill_95,alpha=0.3,label='95% CI')
+                           csv_data['flux_contrast_2.5th'],
+                           csv_data['flux_contrast_97.5th'],
+                           color=c_fill_95,alpha=0.3,label='95% CI')
         ax_fc.fill_between(years,
-                        csv_data['flux_contrast_16th'],
-                        csv_data['flux_contrast_84th'],
-                        color=c_fill_68,alpha=0.5,label='68% CI')
+                           csv_data['flux_contrast_16th'],
+                           csv_data['flux_contrast_84th'],
+                           color=c_fill_68,alpha=0.5,label='68% CI')
         ax_fc.plot(years,csv_data['flux_contrast_median'],'-',
-                color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
+                   color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
         plt.semilogy()
         ax_fc.set_ylabel('Flux Contrast',fontsize=11,fontweight='bold')
         ax_fc.set_xlabel('Year',fontsize=11,fontweight='bold')
@@ -1111,7 +1369,6 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         ax.set_xlim(years[0],years[-1])
 
     axes[-1].set_xlabel('Year',fontsize=11,fontweight='bold')
-    
 
     plt.tight_layout()
 
