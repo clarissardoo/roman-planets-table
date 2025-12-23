@@ -15,35 +15,35 @@ orbit_params={
         "star":"47_UMa",'pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":1.0051917028549999,"m0_err":0.0468882076437500,
-        "plx":72.452800,"plx_err":0.150701,
+        "plx":72.0070,"plx_err":0.0974,
         "n_planets":3,"pl_num":2,"g_mag":4.866588,
     },
     "47_UMa_b":{
         "star":"47_UMa",'pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":1.0051917028549999,"m0_err":0.0468882076437500,
-        "plx":72.452800,"plx_err":0.150701,
+        "plx":72.0070,"plx_err":0.0974,
         "n_planets":3,"pl_num":1,"g_mag":4.866588,
     },
     "47_UMa_d":{
         "star":"47_UMa",'pl_letter':'d',
         "basis":"per tc secosw sesinw k",
         "m0":1.0051917028549999,"m0_err":0.0468882076437500,
-        "plx":72.452800,"plx_err":0.150701,
+        "plx":72.0070,"plx_err":0.0974,
         "n_planets":3,"pl_num":3,"g_mag":4.866588,
     },
     "55_Cnc_d":{
         'star':"55_Cnc",'pl_letter':'d',
         "basis":"per tc secosw sesinw k",
         "m0":0.905,"m0_err":0.015,
-        "plx":79.4274000,"plx_err":0.0776646,
+        "plx":79.4482,"plx_err":0.0429,
         "n_planets":5,"pl_num":3,"g_mag":5.732681,
     },
     "eps_Eri_b":{
         'star':'eps_Eri','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":0.82,"m0_err":0.02,
-        "plx":312.219000,"plx_err":0.467348,
+        "plx":310.5773,"plx_err":0.1355,
         "n_planets":1,"pl_num":1,"g_mag":3.465752,
         "inc_mean":78.810,"inc_sig":29.340,
     },
@@ -51,7 +51,7 @@ orbit_params={
         'star':'HD_87883','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":0.810,"m0_err":0.091,
-        "plx":54.6421000,"plx_err":0.0369056,
+        "plx":54.6678,"plx_err":0.0295,
         "n_planets":1,"pl_num":1,"g_mag":7.286231,
         "inc_mean":25.45,"inc_sig":1.61,
     },
@@ -59,7 +59,7 @@ orbit_params={
         'star':'HD_114783','pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":0.90,"m0_err":0.04,
-        "plx":47.4482000,"plx_err":0.0637202,
+        "plx":47.5529,"plx_err":0.0291,
         "n_planets":2,"pl_num":2,"g_mag":7.330857,
         "inc_mean":159,"inc_sig":6,
     },
@@ -67,14 +67,14 @@ orbit_params={
         'star':'HD_134987','pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":1.0926444945650000,"m0_err":0.0474835459017250,
-        "plx":38.1678000,"plx_err":0.0746519,
+        "plx":38.1946,"plx_err":0.0370,
         "n_planets":2,"pl_num":2,"g_mag":6.302472,
     },
     "HD_154345_b":{
         'star':'HD_154345','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":0.88,"m0_err":0.09,
-        "plx":54.6636000,"plx_err":0.0212277,
+        "plx":54.7359,"plx_err":0.0176,
         "n_planets":1,"pl_num":1,"g_mag":6.583667,
         "inc_mean":69,"inc_sig":13,
         'pl_letter':'b',
@@ -90,7 +90,7 @@ orbit_params={
         'star':'HD_190360','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":1.0,"m0_err":0.1,
-        "plx":62.4443000,"plx_err":0.0616881,
+        "plx":62.4865,"plx_err":0.0354,
         "n_planets":2,"pl_num":1,"g_mag":5.552787,
         "inc_mean":80.2,"inc_sig":23.2,
     },
@@ -98,7 +98,7 @@ orbit_params={
         'star':'HD_217107','pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":1.05963082882500,"m0_err":0.04470613802572,
-        "plx":49.8170000,"plx_err":0.0573616,
+        "plx":49.7846,"plx_err":0.0263,
         "n_planets":2,"pl_num":2,"g_mag":5.996743,
         "inc_mean":89.3,"inc_sig":9.0,
     },
@@ -106,7 +106,7 @@ orbit_params={
         'star':'pi_Men','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
         "m0":1.10,"m0_err":0.14,
-        "plx":54.705200,"plx_err":0.067131,
+        "plx":54.6825,"plx_err":0.0354,
         "n_planets":1,"pl_num":1,"g_mag":5.511580,
         "inc_mean":54.436,"inc_sig":5.945,
     },
@@ -114,7 +114,7 @@ orbit_params={
         'star':'ups_And','pl_letter':'d',
         "basis":"per tc secosw sesinw k",
         "m0":1.29419667430000,"m0_err":0.04122482369025,
-        "plx":74.571100,"plx_err":0.349118,
+        "plx":74.1940,"plx_err":0.2083,
         "n_planets":3,"pl_num":3,"g_mag":3.966133,
         "inc_mean":23.758,"inc_sig":1.316,
     },
@@ -122,7 +122,7 @@ orbit_params={
         'star':'HD_192310','pl_letter':'c',
         "basis":"per tc secosw sesinw k",
         "m0":0.84432448757250,"m0_err":0.02820926681885,
-        "plx":113.648000,"plx_err":0.118606,
+        "plx":113.4872,"plx_err":0.0516,
         "n_planets":2,"pl_num":2,"g_mag":5.481350,
     },
 }
@@ -898,7 +898,7 @@ def gen_point_cloud(planet, post_df,
         lnlike=df_synth["lnprobability"].values
     
     # Organize output cloud
-    distance_pc = 1000.0/parallax
+    #distance_pc = 1000.0/parallax
     epochs = epochs.value
 
     if standard_arr_size:
@@ -922,7 +922,7 @@ def gen_point_cloud(planet, post_df,
         'r_pl_rjup' : r_pl_rjup,
         'inc_deg' : inc_deg,
         'ln_likelihood' : lnlike,
-        'dist_pc' : distance_pc
+        'parallax_mas' : parallax
     }
 
     # Save pickle
