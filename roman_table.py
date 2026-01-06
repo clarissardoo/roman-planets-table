@@ -1086,7 +1086,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
                             df_sample=None,params=None,override_inc=None,
                             override_lan=None,user_inc_mean=None,user_inc_sig=None,
                             start_date=None,end_date=None,figsize=None,fig_ext='png',
-                            band=None,posterior_type='radvel',
+                            band=None,posterior_type='radvel',show_WFOV=False,
                             show_plots=False):
     """
     Create plots including 2D orbits and time-series parameters.
@@ -1130,20 +1130,21 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     OWA_narrow=436
     IWA_wide=450
     OWA_wide=1300
+    OWA = OWA_wide if show_WFOV else OWA_narrow
 
     # Determine if we can plot 2D orbits
     plot_2d=(df_sample is not None and params is not None)
 
     # Set plot location indices
-    n_param_plots=3
+    n_param_plots=2
     sep=0
-    orb_rad=1
-    phase=2
+    # orb_rad=1
+    phase=1
 
     if 'det_probability' in csv_data.columns:
         n_param_plots+=1
         sep+=1
-        orb_rad+=1
+        # orb_rad+=1
         phase+=1
         det=0
         plot_det=True
@@ -1241,6 +1242,10 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         ax_orbit.plot(0,0,'*',color=c_star,markersize=25,label='Star',
                       zorder=15,markeredgecolor='yellow',markeredgewidth=0.5)
 
+        xlims = (np.array([1.1,1.1])*OWA)
+        ax_orbit.set_xlim(*xlims)
+        ax_orbit.set_ylim(*xlims)
+
         ax_orbit.set_aspect('equal')
         ax_orbit.grid(True,alpha=0.2,linestyle=':')
         ax_orbit.legend(loc='best',fontsize=11,framealpha=0.9)
@@ -1278,36 +1283,39 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     ax1.plot(years,csv_data['separation_mas_median'],'-',
              color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
 
-    ax1.axhline(y=IWA_narrow,color=c_iwa_narrow,linestyle='--',linewidth=2.5,
+    if show_WFOV:
+        ax1.axhline(y=IWA_wide,color=c_iwa_wide,linestyle='--',linewidth=2.5,
+                    label='IWA/OWA (Wide)',alpha=0.5)
+        ax1.axhline(y=OWA_wide,color=c_iwa_wide,linestyle='--',linewidth=2.5,alpha=0.5)
+    else:
+        ax1.axhline(y=IWA_narrow,color=c_iwa_narrow,linestyle='--',linewidth=2.5,
                 label='IWA/OWA (Narrow)',alpha=0.7)
-    ax1.axhline(y=OWA_narrow,color=c_iwa_narrow,linestyle='--',linewidth=2.5,alpha=0.7)
-    ax1.axhline(y=IWA_wide,color=c_iwa_wide,linestyle='--',linewidth=2.5,
-                label='IWA/OWA (Wide)',alpha=0.5)
-    ax1.axhline(y=OWA_wide,color=c_iwa_wide,linestyle='--',linewidth=2.5,alpha=0.5)
+        ax1.axhline(y=OWA_narrow,color=c_iwa_narrow,linestyle='--',linewidth=2.5,alpha=0.7)
 
     ax1.set_ylabel('Separation (mas)',fontsize=11,fontweight='bold')
     ax1.grid(True,alpha=0.25,linestyle=':')
     ax1.legend(loc='best',fontsize=9,framealpha=0.9)
     ax1.tick_params(axis='both',which='major',labelsize=10)
+    ax1.set_ylim(0,OWA*1.1)
 
-    # Plot 2: Orbital Radius (AU)
-    ax2=axes[orb_rad]
+    # # Plot 2: Orbital Radius (AU)
+    # ax2=axes[orb_rad]
 
-    ax2.fill_between(years,
-                     csv_data['orbital_radius_au_2.5th'],
-                     csv_data['orbital_radius_au_97.5th'],
-                     color=c_fill_95,alpha=0.3,label='95% CI')
-    ax2.fill_between(years,
-                     csv_data['orbital_radius_au_16th'],
-                     csv_data['orbital_radius_au_84th'],
-                     color=c_fill_68,alpha=0.5,label='68% CI')
-    ax2.plot(years,csv_data['orbital_radius_au_median'],'-',
-             color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
+    # ax2.fill_between(years,
+    #                  csv_data['orbital_radius_au_2.5th'],
+    #                  csv_data['orbital_radius_au_97.5th'],
+    #                  color=c_fill_95,alpha=0.3,label='95% CI')
+    # ax2.fill_between(years,
+    #                  csv_data['orbital_radius_au_16th'],
+    #                  csv_data['orbital_radius_au_84th'],
+    #                  color=c_fill_68,alpha=0.5,label='68% CI')
+    # ax2.plot(years,csv_data['orbital_radius_au_median'],'-',
+    #          color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
 
-    ax2.set_ylabel('Orbital Radius (AU)',fontsize=11,fontweight='bold')
-    ax2.grid(True,alpha=0.25,linestyle=':')
-    ax2.legend(loc='best',fontsize=9,framealpha=0.9)
-    ax2.tick_params(axis='both',which='major',labelsize=10)
+    # ax2.set_ylabel('Orbital Radius (AU)',fontsize=11,fontweight='bold')
+    # ax2.grid(True,alpha=0.25,linestyle=':')
+    # ax2.legend(loc='best',fontsize=9,framealpha=0.9)
+    # ax2.tick_params(axis='both',which='major',labelsize=10)
 
     # Plot 3: Phase Angle (deg)
     ax3=axes[phase]
@@ -1339,7 +1347,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         ax_detprob.set_ylabel('Detection Probability',fontsize=11,fontweight='bold')
         ax_detprob.set_ylim(0,1)
         ax_detprob.grid(True,alpha=0.25,linestyle=':')
-        ax_detprob.legend(loc='best',fontsize=9,framealpha=0.9)
+        # ax_detprob.legend(loc='best',fontsize=9,framealpha=0.9)
         ax_detprob.tick_params(axis='both',which='major',labelsize=10)
 
     # Optional Plot: Flux Contrast
@@ -1363,8 +1371,22 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         ax_fc.legend(loc='best',fontsize=9,framealpha=0.9)
         ax_fc.tick_params(axis='both',which='major',labelsize=10)
 
-    # Ensure all x-axes show the same range
-    for ax in axes:
+    # Add observation windows if available 
+    for a,ax in enumerate(axes):
+        ylims = ax.get_ylim()
+        
+        if 'GB_not_observable' in csv_data.columns:
+            ax.fill_between(years,*ylims,where=~csv_data.GB_not_observable,
+                            alpha=0.2,edgecolor='None',color='orange',
+                            label='GB Observations')
+            if a==0: ax.legend(fontsize=9,framealpha=0.9)
+
+        if 'targ_observable' in csv_data.columns:
+            ax.fill_between(years,*ylims,where=~csv_data.targ_observable,
+                            alpha=0.2,edgecolor='None',color='k',
+                            label='Solar Keepout')
+            if a==0: ax.legend(fontsize=9,framealpha=0.9)
+        # Ensure all x-axes show the same range
         ax.set_xlim(years[0],years[-1])
 
     axes[-1].set_xlabel('Year',fontsize=11,fontweight='bold')
