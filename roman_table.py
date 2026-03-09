@@ -7,38 +7,58 @@ from orbitize.basis import tp_to_tau
 from orbitize.kepler import calc_orbit
 from astropy import units as u
 import matplotlib.pyplot as plt
-import os, pickle, warnings, argparse, glob
+import os,pickle,warnings,argparse,glob
+import os
+import json
+import EXOSIMS.Prototypes.TargetList
+import EXOSIMS.Prototypes.TimeKeeping
+import EXOSIMS.Observatory.ObservatoryL2Halo
+import pandas as pd
+import copy
+import astropy.units as u
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+import matplotlib.gridspec as gridspec
+import matplotlib.colors as colors
 
+from corgietc.corgietc import corgietc
+from pathlib import Path
+from astroquery.simbad import Simbad
+from astropy.time import Time
+# Load EXOSIMS configuration for CGI
+import os
+import json
+
+# Load the CGI specs file
+scriptfile=os.path.join(os.environ["CORGIETC_DATA_DIR"],"scripts","CGI_Noise.json")
+with open(scriptfile,"r") as f:
+    specs=json.loads(f.read())
+
+# Update the modules dictionary to use the HIPfromSimbad star catalog
+specs["modules"]["StarCatalog"]="HIPfromSimbad"
+#%%
+import os
+import json
+import EXOSIMS.Prototypes.TargetList
+import EXOSIMS.Prototypes.TimeKeeping
+import EXOSIMS.Observatory.ObservatoryL2Halo
+import pandas as pd
+import copy
+import astropy.units as u
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+import matplotlib.gridspec as gridspec
+import matplotlib.colors as colors
+
+from corgietc.corgietc import corgietc
+from pathlib import Path
+from astroquery.simbad import Simbad
+from astropy.time import Time
 
 orbit_params={
-    "47_UMa_c":{
-        "star":"47_UMa",'pl_letter':'c',
-        "basis":"per tc secosw sesinw k",
-        "m0":1.0051917028549999,"m0_err":0.0468882076437500,
-        "plx":72.0070,"plx_err":0.0974,
-        "n_planets":3,"pl_num":2,"g_mag":4.866588,
-    },
-    "47_UMa_b":{
-        "star":"47_UMa",'pl_letter':'b',
-        "basis":"per tc secosw sesinw k",
-        "m0":1.0051917028549999,"m0_err":0.0468882076437500,
-        "plx":72.0070,"plx_err":0.0974,
-        "n_planets":3,"pl_num":1,"g_mag":4.866588,
-    },
-    "47_UMa_d":{
-        "star":"47_UMa",'pl_letter':'d',
-        "basis":"per tc secosw sesinw k",
-        "m0":1.0051917028549999,"m0_err":0.0468882076437500,
-        "plx":72.0070,"plx_err":0.0974,
-        "n_planets":3,"pl_num":3,"g_mag":4.866588,
-    },
-    "55_Cnc_d":{
-        'star':"55_Cnc",'pl_letter':'d',
-        "basis":"per tc secosw sesinw k",
-        "m0":0.905,"m0_err":0.015,
-        "plx":79.4482,"plx_err":0.0429,
-        "n_planets":5,"pl_num":3,"g_mag":5.732681,
-    },
+
     "eps_Eri_b":{
         'star':'eps_Eri','pl_letter':'b',
         "basis":"per tc secosw sesinw k",
@@ -46,70 +66,9 @@ orbit_params={
         "plx":310.5773,"plx_err":0.1355,
         "n_planets":1,"pl_num":1,"g_mag":3.465752,
         "inc_mean":78.810,"inc_sig":29.340,
+        "posterior_type":"radvel",
     },
-    "HD_87883_b":{
-        'star':'HD_87883','pl_letter':'b',
-        "basis":"per tc secosw sesinw k",
-        "m0":0.810,"m0_err":0.091,
-        "plx":54.6678,"plx_err":0.0295,
-        "n_planets":1,"pl_num":1,"g_mag":7.286231,
-        "inc_mean":25.45,"inc_sig":1.61,
-    },
-    "HD_114783_c":{
-        'star':'HD_114783','pl_letter':'c',
-        "basis":"per tc secosw sesinw k",
-        "m0":0.90,"m0_err":0.04,
-        "plx":47.5529,"plx_err":0.0291,
-        "n_planets":2,"pl_num":2,"g_mag":7.330857,
-        "inc_mean":159,"inc_sig":6,
-    },
-    "HD_134987_c":{
-        'star':'HD_134987','pl_letter':'c',
-        "basis":"per tc secosw sesinw k",
-        "m0":1.0926444945650000,"m0_err":0.0474835459017250,
-        "plx":38.1946,"plx_err":0.0370,
-        "n_planets":2,"pl_num":2,"g_mag":6.302472,
-    },
-    "HD_154345_b":{
-        'star':'HD_154345','pl_letter':'b',
-        "basis":"per tc secosw sesinw k",
-        "m0":0.88,"m0_err":0.09,
-        "plx":54.7359,"plx_err":0.0176,
-        "n_planets":1,"pl_num":1,"g_mag":6.583667,
-        "inc_mean":69,"inc_sig":13,
-        'pl_letter':'b',
-    },
-    "HD_160691_c":{
-        'star':'HD_160691','pl_letter':'c',
-        "basis":"per tc secosw sesinw k",
-        "m0":1.13,"m0_err":0.02,
-        "plx":64.082,"plx_err":0.120162,
-        "n_planets":4,"pl_num":4,"g_mag":4.942752,
-    },
-    "HD_190360_b":{
-        'star':'HD_190360','pl_letter':'b',
-        "basis":"per tc secosw sesinw k",
-        "m0":1.0,"m0_err":0.1,
-        "plx":62.4865,"plx_err":0.0354,
-        "n_planets":2,"pl_num":1,"g_mag":5.552787,
-        "inc_mean":80.2,"inc_sig":23.2,
-    },
-    "HD_217107_c":{
-        'star':'HD_217107','pl_letter':'c',
-        "basis":"per tc secosw sesinw k",
-        "m0":1.05963082882500,"m0_err":0.04470613802572,
-        "plx":49.7846,"plx_err":0.0263,
-        "n_planets":2,"pl_num":2,"g_mag":5.996743,
-        "inc_mean":89.3,"inc_sig":9.0,
-    },
-    "pi_Men_b":{
-        'star':'pi_Men','pl_letter':'b',
-        "basis":"per tc secosw sesinw k",
-        "m0":1.10,"m0_err":0.14,
-        "plx":54.6825,"plx_err":0.0354,
-        "n_planets":1,"pl_num":1,"g_mag":5.511580,
-        "inc_mean":54.436,"inc_sig":5.945,
-    },
+
     "ups_And_d":{
         'star':'ups_And','pl_letter':'d',
         "basis":"per tc secosw sesinw k",
@@ -117,20 +76,22 @@ orbit_params={
         "plx":74.1940,"plx_err":0.2083,
         "n_planets":3,"pl_num":3,"g_mag":3.966133,
         "inc_mean":23.758,"inc_sig":1.316,
+        "posterior_type":"radvel",
     },
-    "HD_192310_c":{
-        'star':'HD_192310','pl_letter':'c',
-        "basis":"per tc secosw sesinw k",
-        "m0":0.84432448757250,"m0_err":0.02820926681885,
-        "plx":113.4872,"plx_err":0.0516,
-        "n_planets":2,"pl_num":2,"g_mag":5.481350,
+
+    "14_Her_b":{
+        'star':'14_Her','pl_letter':'b',
+        "m0":0.98,"m0_err":0.04,
+        "plx":55.8657,"plx_err":0.0291,
+        "n_planets":2,"pl_num":1,"g_mag":6.3830000,
+        "posterior_type":"orbitize",
+
     },
 }
 
-
-def display_name(planet_name): # Display names for prettier output
-    replaced_underscores = " ".join(planet_name.split("_"))
-    capitalized = replaced_underscores[0].upper()+replaced_underscores[1:]
+def display_name(planet_name):  # Display names for prettier output
+    replaced_underscores=" ".join(planet_name.split("_"))
+    capitalized=replaced_underscores[0].upper()+replaced_underscores[1:]
     return capitalized
 
 
@@ -361,6 +322,7 @@ def compute_sep(
 
     return seps,raoff,deoff,m_pl,inc,true_anomaly,z_au,r_au,parallax
 
+
 def weighted_percentile(data,weights,percentile):
     """Compute weighted percentile given posteriors and ln-like weights from posteriors sampled"""
     result=np.zeros(data.shape[0])
@@ -368,6 +330,29 @@ def weighted_percentile(data,weights,percentile):
         sorted_indices=np.argsort(data[i,:])
         sorted_data=data[i,sorted_indices]
         sorted_weights=weights[sorted_indices]
+        cumsum=np.cumsum(sorted_weights)
+        cutoff=percentile/100.0
+        idx=np.searchsorted(cumsum,cutoff)
+        if idx>=len(sorted_data):
+            idx=len(sorted_data)-1
+        result[i]=sorted_data[idx]
+    return result
+
+
+def weighted_percentile_nan(data,weights,percentile):
+    """Compute weighted percentile, ignoring NaN values per row."""
+    result=np.zeros(data.shape[0])
+    for i in range(data.shape[0]):
+        valid=~np.isnan(data[i,:])
+        if np.sum(valid)<5:
+            result[i]=np.nan
+            continue
+        d=data[i,valid]
+        w=weights[valid]
+        w=w/np.sum(w)
+        sorted_indices=np.argsort(d)
+        sorted_data=d[sorted_indices]
+        sorted_weights=w[sorted_indices]
         cumsum=np.cumsum(sorted_weights)
         cutoff=percentile/100.0
         idx=np.searchsorted(cumsum,cutoff)
@@ -634,30 +619,29 @@ def load_point_cloud(planet,
                      fname=None,
                      broadcast_arrays=True,
                      ):
-
-    
     # Load pickle
     if fname is None:
         planet_name=planet.replace("_","")
         fname=f"{planet_name}_{start_date}_to_{end_date}_PointCloud.pkl"
-    fpath=os.path.join(i_dir,fname)    
+    fpath=os.path.join(i_dir,fname)
     print(f'Loading point cloud from {fpath}')
     if os.path.exists(fpath):
         with open(fpath,'rb') as f:
-            point_cloud = pickle.load(f)
+            point_cloud=pickle.load(f)
     else:
         raise FileNotFoundError
 
     # recast data to consistent array size
     if broadcast_arrays:
-        arr_shape = point_cloud['sep_mas'].shape
-        for param, arr in point_cloud.items():
-            if arr.shape == (arr_shape[0],):
-                point_cloud[param] = np.full(arr_shape,arr[:,np.newaxis])
-            elif arr.shape == (arr_shape[1],):
-                point_cloud[param] = np.full(arr_shape,arr)
-            elif arr.shape != arr_shape:
-                raise ValueError(f'param {param} has unexpected array shape {arr.shape}, when sep_mas has shape {arr_shape}.')
+        arr_shape=point_cloud['sep_mas'].shape
+        for param,arr in point_cloud.items():
+            if arr.shape==(arr_shape[0],):
+                point_cloud[param]=np.full(arr_shape,arr[:,np.newaxis])
+            elif arr.shape==(arr_shape[1],):
+                point_cloud[param]=np.full(arr_shape,arr)
+            elif arr.shape!=arr_shape:
+                raise ValueError(
+                    f'param {param} has unexpected array shape {arr.shape}, when sep_mas has shape {arr_shape}.')
 
     return point_cloud
 
@@ -694,6 +678,7 @@ def load_posteriors(planet,params=None,
             raise UserWarning(f"Multiple posterior data files found for {planet} in {planet_dir}")
 
         print(f"Loading RadVel posterior from {files[0]}...")
+
         df=pd.read_csv(files[0])
 
     elif format=='orbitize':
@@ -760,22 +745,20 @@ def get_likelihood_weights(df,posterior_type='radvel'):
 
     return weights
 
-def gen_point_cloud(planet, post_df,
-                  params=None, #override default planet params
-                  output_dir='.',
-                  start_date='2027-01-01',
-                  end_date='2027-06-30',
-                  time_interval=1,
-                  inc_mode='random',
-                  inc_params=None,
-                  override_lan=0.,
-                  nsamp='all',
-                  out_fname=None,
-                  standard_arr_size=False,
-                posterior_type='radvel'):
-    
 
-
+def gen_point_cloud(planet,post_df,
+                    params=None,  #override default planet params
+                    output_dir='.',
+                    start_date='2027-01-01',
+                    end_date='2027-06-30',
+                    time_interval=1,
+                    inc_mode='random',
+                    inc_params=None,
+                    override_lan=0.,
+                    nsamp='all',
+                    out_fname=None,
+                    standard_arr_size=False,
+                    posterior_type='radvel'):
     if nsamp=='all':
         nsamp=len(post_df)
         print(f"Using all {nsamp} posterior samples")
@@ -788,7 +771,7 @@ def gen_point_cloud(planet, post_df,
     print(f"  Time interval: {time_interval} days")
 
     if params is None:
-        params = orbit_params[planet]
+        params=orbit_params[planet]
 
     if posterior_type=='orbitize':
         print(f"  Inclination: from Orbitize posterior (sampled)")
@@ -844,7 +827,8 @@ def gen_point_cloud(planet, post_df,
         raise ValueError("Error: End date must be after start date")
 
     print(f"Sampling {nsamp} orbits from posterior...")
-    df_sample=post_df.sample(nsamp,replace=True) # TODO: Consider if replace=True is the right choice statistically? -Ell
+    df_sample=post_df.sample(nsamp,
+                             replace=True)  # TODO: Consider if replace=True is the right choice statistically? -Ell
 
     n_epochs=int((t_end.mjd-t_start.mjd)/time_interval)+1
     epochs=Time(np.linspace(t_start.mjd,t_end.mjd,n_epochs),format="mjd")
@@ -854,7 +838,7 @@ def gen_point_cloud(planet, post_df,
     # output shape of each array is (n_epochs,nsamp)
     seps_mas,raoff_mas,deoff_mas,m_pl,inc,true_anomaly,z_au,r_au,parallax=compute_sep(
         df_sample,epochs,
-        params["basis"],params["m0"],params["m0_err"],
+        params.get("basis"),params["m0"],params["m0_err"],
         params["plx"],params["plx_err"],
         params["n_planets"],params["pl_num"],
         override_lan=override_lan,
@@ -870,7 +854,6 @@ def gen_point_cloud(planet, post_df,
     phase_angle_rad=np.arccos(z_au/r_au)
     phase_angle_deg=np.degrees(phase_angle_rad)
 
-    
     m_pl_mjup=m_pl*(u.M_sun/u.M_jup).to('')
     m_pl_mearth=m_pl*(u.M_sun/u.M_earth).to('')
 
@@ -896,33 +879,32 @@ def gen_point_cloud(planet, post_df,
         myBasis=Basis(params["basis"],params["n_planets"])
         df_synth=myBasis.to_synth(df_sample)
         lnlike=df_synth["lnprobability"].values
-    
+
     # Organize output cloud
-    #distance_pc = 1000.0/parallax
-    epochs = epochs.value
+    epochs=epochs.value
 
     if standard_arr_size:
-        distance_pc = np.full_like(seps_mas,1000.0/parallax)
-        lnlike = np.full_like(seps_mas,lnlike) # ln likelihood
-        epochs = np.full_like(seps_mas,epochs[:,np.newaxis])
-        m_pl_mjup = np.full_like(seps_mas,m_pl_mjup)
-        r_pl_rjup = np.full_like(seps_mas,r_pl_rjup)
-        inc_deg = np.full_like(seps_mas,inc_deg)
+        distance_pc=np.full_like(seps_mas,1000.0/parallax)
+        lnlike=np.full_like(seps_mas,lnlike)  # ln likelihood
+        epochs=np.full_like(seps_mas,epochs[:,np.newaxis])
+        m_pl_mjup=np.full_like(seps_mas,m_pl_mjup)
+        r_pl_rjup=np.full_like(seps_mas,r_pl_rjup)
+        inc_deg=np.full_like(seps_mas,inc_deg)
 
-    point_cloud = {
-        'epoch_mjd' : epochs,
-        'sep_mas' : seps_mas,
-        'raoff_mas' : raoff_mas,
-        'deoff_mas' : deoff_mas,
-        'true_anom_deg' : true_anomaly,
-        'z_au' : z_au,
-        'orbital_radius_au' : r_au,
-        'phase_angle_deg' : phase_angle_deg,
-        'm_pl_mjup' : m_pl_mjup,
-        'r_pl_rjup' : r_pl_rjup,
-        'inc_deg' : inc_deg,
-        'ln_likelihood' : lnlike,
-        'parallax_mas' : parallax
+    point_cloud={
+        'epoch_mjd':epochs,
+        'sep_mas':seps_mas,
+        'raoff_mas':raoff_mas,
+        'deoff_mas':deoff_mas,
+        'true_anom_deg':true_anomaly,
+        'z_au':z_au,
+        'orbital_radius_au':r_au,
+        'phase_angle_deg':phase_angle_deg,
+        'm_pl_mjup':m_pl_mjup,
+        'r_pl_rjup':r_pl_rjup,
+        'inc_deg':inc_deg,
+        'ln_likelihood':lnlike,
+        'parallax_mas':parallax
     }
 
     # Save pickle
@@ -930,8 +912,8 @@ def gen_point_cloud(planet, post_df,
         planet_name=planet.replace("_","")
         output_file=f"{planet_name}_{start_date}_to_{end_date}_PointCloud.pkl"
     else:
-        output_file = out_fname.split('.')[0] + '_PointCloud.pkl'
-    output_fpath=os.path.join(output_dir,output_file)    
+        output_file=out_fname.split('.')[0]+'_PointCloud.pkl'
+    output_fpath=os.path.join(output_dir,output_file)
     print(f'Saving point cloud to {output_fpath}')
     with open(output_fpath,'wb') as f:
         pickle.dump(point_cloud,f)
@@ -939,27 +921,278 @@ def gen_point_cloud(planet, post_df,
     return point_cloud
 
 
+def calc_integration_time_for_cloud(
+    planet,
+    point_cloud,
+    target_snr=5,
+    obs_mode='IMG_NFB1_HLC',
+    band=1,
+    params=None,
+    n_inttime_samples=None,
+    launch_date=None,
+    IWA_mas=None,
+    OWA_mas=None,
+    max_inttime_hours=1000,
+    min_det_prob=0.05,
+):
+    import time
+
+    if params is None:
+        params = orbit_params[planet]
+
+    if launch_date is None:
+        launch_date = Time('2026-09-28T00:00:00.000', format='isot')
+
+    # Build target list from star HIP number
+    star = params['star']
+    HIP_name = Simbad.query_objectids(star, criteria="ident.id LIKE 'HIP%'")['id'][0]
+    HIP_num = int(HIP_name.split('HIP')[1])
+    TL = EXOSIMS.Prototypes.TargetList.TargetList(**copy.deepcopy(specs), catalogpath=[HIP_num])
+    OS = TL.OpticalSystem
+    sInd = 0
+    mode_opt = list(filter(lambda m: m['Scenario'] == f'OPT_{obs_mode}', OS.observingModes))[0]
+    mode_con = list(filter(lambda m: m['Scenario'] == f'CON_{obs_mode}', OS.observingModes))[0]
+    mode_opt['SNR'] = target_snr
+    mode_con['SNR'] = target_snr
+
+    # IWA/OWA from mode if not provided
+    if IWA_mas is None:
+        IWA_mas = mode_opt['syst']['IWA'].to(u.mas).value
+    if OWA_mas is None:
+        OWA_mas = mode_opt['syst']['OWA'].to(u.mas).value
+
+    # Build TK once outside epoch loop (not passed to calc_intTime anyway)
+    TK = EXOSIMS.Prototypes.TimeKeeping.TimeKeeping(missionLife=5.25)
+
+
+    # Epochs
+    if point_cloud['epoch_mjd'].ndim == 2:
+        epoch_mjd = point_cloud['epoch_mjd'][:, 0]
+    else:
+        epoch_mjd = point_cloud['epoch_mjd']
+    n_epochs = len(epoch_mjd)
+
+    # Sample indices (this is for faster computation - for robustness use all but note it'll take a long time D: )
+    # we favor high lnlike from point cloud here
+    total_samples=point_cloud['sep_mas'].shape[1]
+
+    lnlike=point_cloud['ln_likelihood']
+    if lnlike.ndim==2:
+        lnlike=lnlike[0]
+
+    w=np.exp(lnlike-np.max(lnlike))
+    w=w/np.sum(w)
+
+    if n_inttime_samples is None or n_inttime_samples=='all':
+        sample_indices=np.arange(total_samples)
+    else:
+        n_inttime_samples=min(int(n_inttime_samples),total_samples)
+        sample_indices=np.random.choice(
+            total_samples,
+            size=n_inttime_samples,
+            replace=False,
+            p=w
+        )
+    n_samples=len(sample_indices)
+
+    # Output arrays
+    Tint_opt_hours = np.full((n_epochs, n_samples), np.nan)
+    Tint_con_hours = np.full((n_epochs, n_samples), np.nan)
+
+    # det prob mask to save computation time
+    has_det_prob = 'detection_probability' in point_cloud
+
+    print(f'Calculating integration times for {planet}, band {band}')
+    print(f'  {n_epochs} epochs x {n_samples} samples')
+    print(f'  IWA={IWA_mas:.1f} mas, OWA={OWA_mas:.1f} mas')
+    print(f'  Max integration time: {max_inttime_hours} hours')
+    print()
+
+    scenario_start = time.time()
+    epochs_computed = 0  # track epochs where we actually called calc_intTime
+    for i_epoch in range(n_epochs):
+        # Progress every epoch
+        elapsed = time.time() - scenario_start
+        rate = epochs_computed / elapsed if elapsed > 0 else 0
+        remaining = (n_epochs - i_epoch) / rate if rate > 0 else 0
+        epoch_mjd_val = epoch_mjd[i_epoch]
+        epoch_year = Time(epoch_mjd_val, format='mjd').decimalyear
+        print(f'  Epoch {i_epoch+1:3d}/{n_epochs} '
+              f'(year={epoch_year:.3f}) | '
+              f'{elapsed:.1f}s elapsed, ~{remaining:.0f}s remaining | '
+              f'{epochs_computed} computed, {i_epoch - epochs_computed} skipped',
+              end='\r')
+        # Skip epoch if det prob too low
+        if has_det_prob:
+            det_prob = point_cloud['detection_probability'][i_epoch]
+            if det_prob < min_det_prob:
+                continue  # leave as NaN
+
+        # Per-sample arrays for this epoch
+        seps          = point_cloud['sep_mas'][i_epoch, sample_indices]
+        contrasts_raw = point_cloud['flux_contrast'][i_epoch, sample_indices]
+        orb_rad       = point_cloud['orbital_radius_au'][i_epoch, sample_indices]
+
+        # Safety: mask zero/negative contrasts before log
+        valid_contrast = contrasts_raw > 0
+        contrasts_dmag = np.where(valid_contrast, -2.5 * np.log10(contrasts_raw), np.nan)
+
+        # mask invalid contrasts and separations
+        valid=np.isfinite(contrasts_dmag)
+        valid&=(seps>=IWA_mas)&(seps<=OWA_mas)
+        if not np.any(valid):
+            continue  # leave as NaN
+
+        seps_v     = seps[valid]
+        contrast_v = contrasts_dmag[valid]
+        orb_rad_v  = orb_rad[valid]
+        n_valid    = int(np.sum(valid))
+
+        # Per-sample exozodi scaled by orbital radius
+        JEZ_v   = TL.JEZ0[mode_opt["hex"]][sInd] / orb_rad_v**2
+        fZ_v    = np.repeat(TL.ZodiacalLight.fZ0, n_valid)
+        sInds_v = np.zeros(n_valid, dtype=int)
+
+        for mode, arr in [(mode_opt, Tint_opt_hours), (mode_con, Tint_con_hours)]:
+            try:
+                Tint = OS.calc_intTime(
+                    TL,
+                    sInds_v,
+                    fZ_v,
+                    JEZ_v,
+                    contrast_v,
+                    seps_v * u.mas,
+                    mode
+                )
+                t_hours = Tint.to_value(u.h)
+                t_hours[t_hours > max_inttime_hours] = np.nan
+                arr[i_epoch, valid] = t_hours
+            except Exception as e:
+                print(f'\n  Warning: calc_intTime failed at epoch {i_epoch}: {e}')
+                continue
+
+        epochs_computed += 1
+
+    print(f'\nDone, Total time: {(time.time() - scenario_start)/60:.1f} minutes')
+    print(f'  {epochs_computed}/{n_epochs} epochs computed, '
+          f'{n_epochs - epochs_computed} skipped (det_prob or outside FOV)')
+
+    # Report
+    for label, arr in [('opt', Tint_opt_hours), ('con', Tint_con_hours)]:
+        valid_vals = arr[np.isfinite(arr)]
+        n_nan = np.sum(np.isnan(arr))
+        print(f'  {label}: {len(valid_vals)} valid, {n_nan} NaN'
+              + (f', range {valid_vals.min():.2f}-{valid_vals.max():.2f} h '
+                 f'(median {np.median(valid_vals):.2f} h)'
+                 if len(valid_vals) > 0 else ''))
+
+    point_cloud['integration_time_hours_opt'] = Tint_opt_hours
+    point_cloud['integration_time_hours_con'] = Tint_con_hours
+    point_cloud['integration_time_days_opt']  = Tint_opt_hours / 24.0
+    point_cloud['integration_time_days_con']  = Tint_con_hours / 24.0
+    point_cloud['integration_time_sample_indices'] = sample_indices
+
+    return point_cloud
+
+
+def calculate_integration_time(planet,target_snr,band=1,obs_mode='IMG_NFB1_HLC'):
+    # this is Arthur Vigan's function which does int time calculation using percentiles.
+    # THe cloud function is what we use in output plots, see above
+    #in notebook
+    target=planet
+    SNR=target_snr
+    obs_mode=obs_mode
+    band=band
+
+    data=load_point_cloud(target)
+
+    # star Hipparcos identifier
+    star=target[:-2]
+    HIP_name=Simbad.query_objectids(star,criteria="ident.id LIKE 'HIP%'")['id'][0]
+    HIP_num=int(HIP_name.split('HIP')[1])
+
+    # generate the target list
+    TL=EXOSIMS.Prototypes.TargetList.TargetList(**copy.deepcopy(specs),catalogpath=[HIP_num])
+    OS=TL.OpticalSystem
+    ZL=TL.ZodiacalLight
+
+    Obs=EXOSIMS.Observatory.ObservatoryL2Halo.ObservatoryL2Halo()
+    sInd=0
+
+    TK=EXOSIMS.Prototypes.TimeKeeping.TimeKeeping(missionLife=5.25)
+    launch_date=Time('2026-09-28T00:00:00.000',format='isot')
+
+    for scenario in ('opt','con'):
+        print(f'Scenario = {scenario}')
+
+        mode_name=f'{scenario.upper()}_{obs_mode}'
+        mode=list(filter(lambda mode:mode['Scenario']==mode_name,OS.observingModes))[0]
+
+        mode['SNR']=target_snr
+
+        fZ=np.repeat(TL.ZodiacalLight.fZ0,1)
+
+        for irow,row in data.iterrows():
+            mjd=row['mjd']
+            dyear=row['decimal_year']
+            sep_med=row['separation_mas_median']
+            orb_rad_au=row['orbital_radius_au_median']
+            contrast_med=-2.5*np.log10(row['flux_contrast_median'])
+
+            print(f'> {dyear:.2f}, sep={sep_med:6.1f} mas, contrast={contrast_med:.1f} mag',end='\r')
+
+            TK.allocate_time((mjd-launch_date.mjd)*u.d)
+
+            JEZ=np.repeat(TL.JEZ0[mode["hex"]][sInd]/orb_rad_au**2,1)
+
+            Tint=OS.calc_intTime(TL,[sInd],fZ,JEZ,np.array([contrast_med]),np.array([sep_med])*u.mas,mode)
+            data.loc[irow,f'integration_time_days_{scenario}']=Tint.to_value(u.d)
+            data.loc[irow,f'integration_time_hours_{scenario}']=Tint.to_value(u.h)
+
+    return data['integration_time_hours_opt'].values,data['integration_time_hours_con'].values
+
+
+def load_summary_csv(planet,
+                     i_dir='.',
+                     start_date='2027-01-01',
+                     end_date='2027-06-30',
+                     output=None):
+    if output is None:
+        planet_name=planet.replace("_","")
+        csv_file=f"{planet_name}_separations_{start_date}_to_{end_date}.csv"
+    else:
+        csv_file=output.split('.')[0]+'.csv'
+
+    csv_fpath=os.path.join(i_dir,csv_file)
+    print(f"Reading orbit summary csv from {csv_fpath}...")
+    csv_data=pd.read_csv(csv_fpath)
+
+    return csv_data
+
+
 def gen_summary_csv(planet,
                     point_cloud,
                     output_dir='.',
                     output=None):
-    
+    """
+    Generate summary CSV with weighted statistics including integration times.
+    """
 
-    m_pl_mjup = point_cloud['m_pl_mjup']
+    m_pl_mjup=point_cloud['m_pl_mjup']
     mass_median=np.median(m_pl_mjup)
     mass_16th=np.percentile(m_pl_mjup,16)
     mass_84th=np.percentile(m_pl_mjup,84)
     mass_err_lower=mass_median-mass_16th
     mass_err_upper=mass_84th-mass_median
 
-    r_pl_rjup = point_cloud['r_pl_rjup']
+    r_pl_rjup=point_cloud['r_pl_rjup']
     rad_median=np.median(r_pl_rjup)
     rad_16th=np.percentile(r_pl_rjup,16)
     rad_84th=np.percentile(r_pl_rjup,84)
     rad_err_lower=rad_median-rad_16th
     rad_err_upper=rad_84th-rad_median
 
-    inc_deg = point_cloud['inc_deg']
+    inc_deg=point_cloud['inc_deg']
     inc_median=np.median(inc_deg)
     inc_16th=np.percentile(inc_deg,16)
     inc_84th=np.percentile(inc_deg,84)
@@ -969,115 +1202,105 @@ def gen_summary_csv(planet,
     print(f"Inclination: {inc_median:.2f} [{inc_16th:.2f}, {inc_84th:.2f}] degrees")
     print()
 
-    if point_cloud['epoch_mjd'].ndim == 2:
-        epochs = Time(point_cloud['epoch_mjd'][:,0],format='mjd')
+    # Get epochs
+    if point_cloud['epoch_mjd'].ndim==2:
+        epochs=Time(point_cloud['epoch_mjd'][:,0],format='mjd')
     else:
-        epochs = Time(point_cloud['epoch_mjd'],format='mjd')
-    start_date = epochs.iso[0][:10]
-    end_date = epochs.iso[-1][:10]
-    
-    csv_data_dict = {
+        epochs=Time(point_cloud['epoch_mjd'],format='mjd')
+
+    start_date=epochs.iso[0][:10]
+    end_date=epochs.iso[-1][:10]
+
+    # Initialize CSV data dictionary
+    csv_data_dict={
         'date_iso':epochs.iso,
         'mjd':epochs.mjd,
         'decimal_year':epochs.decimalyear,
-        }
-    
-    if 'detection_probability' in point_cloud.keys():
-        csv_data_dict['det_probability'] = point_cloud['detection_probability']
-    if 'GB_not_observable' in point_cloud.keys():
-        csv_data_dict['GB_not_observable'] = point_cloud['GB_not_observable']
-    if 'targ_observable' in point_cloud.keys():
-        csv_data_dict['targ_observable'] = point_cloud['targ_observable']
-    
-    # Prep some arrays
-    phase_angle_rad = point_cloud['phase_angle_deg'] * np.pi / 180.
-    lambert_phase = (np.sin(phase_angle_rad)+(np.pi-phase_angle_rad)*np.cos(phase_angle_rad))/np.pi
-
-    labeled_data = {
-        'separation_mas' : point_cloud['sep_mas'],
-        'orbital_radius_au' : point_cloud['orbital_radius_au'],
-        'phase_angle_deg' : point_cloud['phase_angle_deg'],
-        'lambert_phase' : lambert_phase,
-        'true_anomaly' : np.degrees(point_cloud['true_anom_deg'])%360,
     }
 
-    # Keys which may not be present
-    if 'phi_x_a' in point_cloud.keys():
-        labeled_data['phi_x_a'] = point_cloud['phi_x_a']
-    if 'flux_contrast' in point_cloud.keys():
-        labeled_data['flux_contrast'] = point_cloud['flux_contrast']
+    # Add optional scalar fields
+    if 'detection_probability' in point_cloud.keys():
+        csv_data_dict['det_probability']=point_cloud['detection_probability']
+    if 'GB_not_observable' in point_cloud.keys():
+        csv_data_dict['GB_not_observable']=point_cloud['GB_not_observable']
+    if 'targ_observable' in point_cloud.keys():
+        csv_data_dict['targ_observable']=point_cloud['targ_observable']
 
+    # Prepare phase angle calculations
+    phase_angle_rad=point_cloud['phase_angle_deg']*np.pi/180.
+    lambert_phase=(np.sin(phase_angle_rad)+(np.pi-phase_angle_rad)*
+                   np.cos(phase_angle_rad))/np.pi
 
-    # This is where we weight the posteriors by lnlike
-    lnlike = point_cloud['ln_likelihood']
-    if lnlike.ndim==2: lnlike = lnlike[0]
+    # Dictionary of labeled data to compute statistics for
+    labeled_data={
+        'separation_mas':point_cloud['sep_mas'],
+        'orbital_radius_au':point_cloud['orbital_radius_au'],
+        'phase_angle_deg':point_cloud['phase_angle_deg'],
+        'lambert_phase':lambert_phase,
+        'true_anomaly':np.degrees(point_cloud['true_anom_deg'])%360,
+    }
+
+    # Add optional keys
+    optional_keys=['phi_x_a','flux_contrast']
+    for key in optional_keys:
+        if key in point_cloud.keys():
+            labeled_data[key]=point_cloud[key]
+
+    # Weight the posteriors by lnlike for FULL sample arrays
+    lnlike=point_cloud['ln_likelihood']
+    if lnlike.ndim==2:
+        lnlike=lnlike[0]
     weights=np.exp(lnlike-np.max(lnlike))
     weights=weights/np.sum(weights)
 
     # Compute percentiles, mean, and std for all quantities
-    for label, arr in labeled_data.items():
-        csv_data_dict[f'{label}_median'] = weighted_percentile(arr,weights,50)
-        csv_data_dict[f'{label}_16th'] = weighted_percentile(arr,weights,16)
-        csv_data_dict[f'{label}_84th'] = weighted_percentile(arr,weights,84)
-        csv_data_dict[f'{label}_2.5th'] = weighted_percentile(arr,weights,2.5)
-        csv_data_dict[f'{label}_97.5th'] = weighted_percentile(arr,weights,97.5)
-        csv_data_dict[f'{label}_mean'] = weighted_mean(arr,weights)
-        csv_data_dict[f'{label}_std'] = weighted_std(arr,weights)
+    for label,arr in labeled_data.items():
+        csv_data_dict[f'{label}_median']=weighted_percentile(arr,weights,50)
+        csv_data_dict[f'{label}_16th']=weighted_percentile(arr,weights,16)
+        csv_data_dict[f'{label}_84th']=weighted_percentile(arr,weights,84)
+        csv_data_dict[f'{label}_2.5th']=weighted_percentile(arr,weights,2.5)
+        csv_data_dict[f'{label}_97.5th']=weighted_percentile(arr,weights,97.5)
+        csv_data_dict[f'{label}_mean']=weighted_mean(arr,weights)
+        csv_data_dict[f'{label}_std']=weighted_std(arr,weights)
 
+    # Handle integration times separately (they have different sample sizes)
+    # Use weighted_percentile_nan so that out-of-FOV NaNs propagate correctly
+    # into the CSV — epochs where the planet is inside the IWA will have NaN
+    # percentiles, which in turn produces gaps in the integration time plot.
+    if 'integration_time_hours_opt' in point_cloud.keys():
+        if 'integration_time_sample_indices' in point_cloud.keys():
+            inttime_indices=point_cloud['integration_time_sample_indices']
+            inttime_weights=weights[inttime_indices]
+            inttime_weights=inttime_weights/np.sum(inttime_weights)
+        else:
+            inttime_weights=weights
 
+        for key in ['integration_time_hours_opt','integration_time_hours_con',
+                    'integration_time_days_opt','integration_time_days_con']:
+            if key in point_cloud.keys():
+                arr=point_cloud[key]
+                csv_data_dict[f'{key}_median']=weighted_percentile_nan(arr,inttime_weights,50)
+                csv_data_dict[f'{key}_16th']=weighted_percentile_nan(arr,inttime_weights,16)
+                csv_data_dict[f'{key}_84th']=weighted_percentile_nan(arr,inttime_weights,84)
+                csv_data_dict[f'{key}_2.5th']=weighted_percentile_nan(arr,inttime_weights,2.5)
+                csv_data_dict[f'{key}_97.5th']=weighted_percentile_nan(arr,inttime_weights,97.5)
+                csv_data_dict[f'{key}_mean']=weighted_mean(arr,inttime_weights)
+                csv_data_dict[f'{key}_std']=weighted_std(arr,inttime_weights)
 
+    # Create DataFrame
     csv_data=pd.DataFrame(csv_data_dict)
 
-    # output file name
+    # Determine output file name
     if output is None:
         planet_name=planet.replace("_","")
         output_file=f"{planet_name}_separations_{start_date}_to_{end_date}.csv"
     else:
-        output_file=output.split('.')[0] + '.csv'
+        output_file=output.split('.')[0]+'.csv'
 
     output_fpath=os.path.join(output_dir,output_file)
     print(f"Writing output to {output_fpath}...")
     with open(output_fpath,'w') as f:
         csv_data.to_csv(f,index=False)
-
-    # # Generate plots if requested
-    # if plot:
-    #     print("\nGenerating plots...")
-    #     output_prefix=output_fpath.replace('.csv','')
-    #     plot_orbital_parameters(
-    #         csv_data,
-    #         display_names[planet],
-    #         output_prefix,
-    #         df_sample=df_sample,
-    #         params=params,
-    #         # override_inc=override_inc,
-    #         override_lan=override_lan,
-    #         # user_inc_mean=user_inc_mean,
-    #         # user_inc_sig=user_inc_sig,
-    #         start_date=start_date,
-    #         end_date=end_date,
-    #         fig_ext='pdf',
-    #         show_plots=show_plots
-        # )
-
-    return csv_data
-
-
-def load_summary_csv(planet,
-                     i_dir='.',
-                     start_date='2027-01-01',
-                     end_date='2027-06-30',
-                     output=None):
-    
-    if output is None:
-        planet_name=planet.replace("_","")
-        csv_file=f"{planet_name}_separations_{start_date}_to_{end_date}.csv"
-    else:
-        csv_file=output.split('.')[0] + '.csv'
-
-    csv_fpath=os.path.join(i_dir,csv_file)
-    print(f"Reading orbit summary csv from{csv_fpath}...")
-    csv_data = pd.read_csv(csv_fpath)
 
     return csv_data
 
@@ -1090,25 +1313,8 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
                             show_plots=False):
     """
     Create plots including 2D orbits and time-series parameters.
-
-    Args:
-        csv_data (pd.DataFrame): DataFrame with computed orbital parameters
-        planet_name (str): Display name of the planet
-        output_prefix (str): Prefix for output plot files
-        df_sample (pd.DataFrame): Sampled posterior data (for orbit plots)
-        params (dict): Orbital parameters dictionary (for orbit plots)
-        override_inc (float): Fixed inclination override
-        override_lan (float): Fixed longitude of ascending node override
-        user_inc_mean (float): User-provided inclination mean
-        user_inc_sig (float): User-provided inclination std dev
-        start_date (str): Start date for orbit plot
-        end_date (str): End date for orbit plot
-        figsize (tuple of float): Figure size in inches
-        fig_ext (str): file extension for saved figure, defaults to 'png'
-        band (int): CGI wavelength band (1, 3, or 4) for plot title.
-        posterior_type (str): 'radvel' or 'orbitize'
-        show_plots (bool): display the figure in output stream, defaults False
     """
+
     # Convert decimal years for plotting
     years=csv_data['decimal_year'].values
 
@@ -1124,13 +1330,15 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     c_start=cm(0.7)  # orange for start marker
     c_end=cm(0.3)  # purple for end marker
     c_star=cm(0.0)  # dark purple/blue for star
+    c_opt=cm(0.3)  # color for optimistic integration time
+    c_con=cm(0.7)  # color for conservative integration time
 
     # IWA/OWA values
     IWA_narrow=155
     OWA_narrow=436
-    IWA_wide=450
-    OWA_wide=1300
-    OWA = OWA_wide if show_WFOV else OWA_narrow
+    IWA_wide=300
+    OWA_wide=994
+    OWA=OWA_wide if show_WFOV else OWA_narrow
 
     # Determine if we can plot 2D orbits
     plot_2d=(df_sample is not None and params is not None)
@@ -1138,13 +1346,11 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     # Set plot location indices
     n_param_plots=2
     sep=0
-    # orb_rad=1
     phase=1
 
     if 'det_probability' in csv_data.columns:
         n_param_plots+=1
         sep+=1
-        # orb_rad+=1
         phase+=1
         det=0
         plot_det=True
@@ -1158,16 +1364,27 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     else:
         plot_fc=False
 
-    if plot_2d:
-        if figsize is None: figsize=(20,12)
-        fig=plt.figure(figsize=figsize)
-        gs=fig.add_gridspec(n_param_plots,2,width_ratios=[1.2,1],hspace=0.3,wspace=0.3)
+    # Check if integration time data exists
+    plot_inttime=('integration_time_hours_opt_median' in csv_data.columns and
+                  'integration_time_hours_con_median' in csv_data.columns)
 
-        # 2d orbit trajectory
-        epochs_2d=Time(np.linspace(Time(start_date).mjd,Time(end_date).mjd,100),format="mjd")
+    if plot_inttime:
+        n_param_plots+=1
+        inttime_idx=n_param_plots-1
+
+    if plot_2d:
+        if figsize is None:
+            figsize=(20,12)
+        fig=plt.figure(figsize=figsize)
+        gs=fig.add_gridspec(n_param_plots,2,width_ratios=[1.2,1],
+                            hspace=0.3,wspace=0.3)
+
+        # 2D orbit trajectory
+        epochs_2d=Time(np.linspace(Time(start_date).mjd,Time(end_date).mjd,100),
+                       format="mjd")
         raoff_2d,deoff_2d,best_idx=compute_orbit_for_plotting(
             df_sample,epochs_2d,
-            params["basis"],params["m0"],params["m0_err"],
+            params.get("basis"),params["m0"],params["m0_err"],
             params["plx"],params["plx_err"],
             params["n_planets"],params["pl_num"],
             override_inc=override_inc,
@@ -1183,7 +1400,6 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
 
         # Generate title strings based on posterior type
         if posterior_type=='orbitize':
-            # For Orbitize, show statistics from posterior
             inc_col=f'inc{params["pl_num"]}'
             pan_col=f'pan{params["pl_num"]}'
 
@@ -1203,7 +1419,6 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
             else:
                 lan_str='from posterior'
         else:
-            # For RadVel, use existing logic
             if user_inc_mean is not None and user_inc_sig is not None:
                 inc_str=f'{user_inc_mean:.1f}±{user_inc_sig:.1f}°'
             elif override_inc=="gaussian" and params.get("inc_mean") is not None:
@@ -1220,29 +1435,31 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         ax_orbit.set_xlabel('RA Offset [mas]',fontsize=13,fontweight='bold')
         ax_orbit.set_ylabel('Dec Offset [mas]',fontsize=13,fontweight='bold')
 
-        #IWA/OWA circles
+        # IWA/OWA circles
         theta=np.linspace(0,2*np.pi,100)
         ax_orbit.plot(IWA_narrow*np.cos(theta),IWA_narrow*np.sin(theta),
-                      color=c_iwa_narrow,lw=3,linestyle='--',label='IWA/OWA (Narrow)',alpha=0.7)
+                      color=c_iwa_narrow,lw=3,linestyle='--',
+                      label='IWA/OWA (Narrow)',alpha=0.7)
         ax_orbit.plot(OWA_narrow*np.cos(theta),OWA_narrow*np.sin(theta),
                       color=c_iwa_narrow,lw=3,linestyle='--',alpha=0.7)
         ax_orbit.plot(IWA_wide*np.cos(theta),IWA_wide*np.sin(theta),
-                      color=c_iwa_wide,lw=3,linestyle='--',label='IWA/OWA (Wide)',alpha=0.5)
+                      color=c_iwa_wide,lw=3,linestyle='--',
+                      label='IWA/OWA (Wide)',alpha=0.5)
         ax_orbit.plot(OWA_wide*np.cos(theta),OWA_wide*np.sin(theta),
                       color=c_iwa_wide,lw=3,linestyle='--',alpha=0.5)
 
-        # sample orbits
+        # Sample orbits
         n_samples=min(50,raoff_2d.shape[1])
         sample_indices=np.random.choice(raoff_2d.shape[1],n_samples,replace=False)
         for i in sample_indices:
             ax_orbit.plot(raoff_2d[:,i],deoff_2d[:,i],'-',
                           color=c_orbit_light,alpha=0.2,linewidth=1.5)
 
-        # star <3
+        # Star
         ax_orbit.plot(0,0,'*',color=c_star,markersize=25,label='Star',
                       zorder=15,markeredgecolor='yellow',markeredgewidth=0.5)
 
-        xlims = (np.array([1.1,1.1])*OWA)
+        xlims=(np.array([1.1,1.1])*OWA)
         ax_orbit.set_xlim(*xlims)
         ax_orbit.set_ylim(*xlims)
 
@@ -1255,16 +1472,19 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         axes=[fig.add_subplot(gs[i,1]) for i in range(n_param_plots)]
 
     else:
-        # Create figure with only time series (4 subplots stacked)
-        if figsize is None: figsize=(14,12)
+        # Create figure with only time series (stacked subplots)
+        if figsize is None:
+            figsize=(14,12)
         fig,axes=plt.subplots(n_param_plots,1,figsize=figsize)
+        if n_param_plots==1:
+            axes=[axes]
 
     start_year=years[0]
     end_year=years[-1]
 
-    band_str = f' Band {band}' if not (band is None) else ''
+    band_str=f' Band {band}' if not (band is None) else ''
     fig.suptitle(f'{display_name(planet)}{band_str} ({start_year:.1f} → {end_year:.1f})',
-                     fontsize=16,fontweight='bold',y=0.995)
+                 fontsize=16,fontweight='bold',y=0.995)
 
     # Plot 1: Separation (mas)
     ax1=axes[sep]
@@ -1289,7 +1509,7 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
         ax1.axhline(y=OWA_wide,color=c_iwa_wide,linestyle='--',linewidth=2.5,alpha=0.5)
     else:
         ax1.axhline(y=IWA_narrow,color=c_iwa_narrow,linestyle='--',linewidth=2.5,
-                label='IWA/OWA (Narrow)',alpha=0.7)
+                    label='IWA/OWA (Narrow)',alpha=0.7)
         ax1.axhline(y=OWA_narrow,color=c_iwa_narrow,linestyle='--',linewidth=2.5,alpha=0.7)
 
     ax1.set_ylabel('Separation (mas)',fontsize=11,fontweight='bold')
@@ -1298,28 +1518,8 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     ax1.tick_params(axis='both',which='major',labelsize=10)
     ax1.set_ylim(0,OWA*1.1)
 
-    # # Plot 2: Orbital Radius (AU)
-    # ax2=axes[orb_rad]
-
-    # ax2.fill_between(years,
-    #                  csv_data['orbital_radius_au_2.5th'],
-    #                  csv_data['orbital_radius_au_97.5th'],
-    #                  color=c_fill_95,alpha=0.3,label='95% CI')
-    # ax2.fill_between(years,
-    #                  csv_data['orbital_radius_au_16th'],
-    #                  csv_data['orbital_radius_au_84th'],
-    #                  color=c_fill_68,alpha=0.5,label='68% CI')
-    # ax2.plot(years,csv_data['orbital_radius_au_median'],'-',
-    #          color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
-
-    # ax2.set_ylabel('Orbital Radius (AU)',fontsize=11,fontweight='bold')
-    # ax2.grid(True,alpha=0.25,linestyle=':')
-    # ax2.legend(loc='best',fontsize=9,framealpha=0.9)
-    # ax2.tick_params(axis='both',which='major',labelsize=10)
-
-    # Plot 3: Phase Angle (deg)
+    # Plot 2: Phase Angle (deg)
     ax3=axes[phase]
-
     ax3.fill_between(years,
                      csv_data['phase_angle_deg_2.5th'],
                      csv_data['phase_angle_deg_97.5th'],
@@ -1340,14 +1540,12 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
     # Optional Plot: Detection Probability
     if plot_det:
         ax_detprob=axes[det]
-
         ax_detprob.plot(years,csv_data['det_probability'],'-',
                         color=c_median,linewidth=2.5,marker='o',markersize=3)
 
         ax_detprob.set_ylabel('Detection Probability',fontsize=11,fontweight='bold')
         ax_detprob.set_ylim(0,1)
         ax_detprob.grid(True,alpha=0.25,linestyle=':')
-        # ax_detprob.legend(loc='best',fontsize=9,framealpha=0.9)
         ax_detprob.tick_params(axis='both',which='major',labelsize=10)
 
     # Optional Plot: Flux Contrast
@@ -1363,30 +1561,116 @@ def plot_orbital_parameters(planet,csv_data,output_prefix,
                            color=c_fill_68,alpha=0.5,label='68% CI')
         ax_fc.plot(years,csv_data['flux_contrast_median'],'-',
                    color=c_median,linewidth=2.5,label='Median',marker='o',markersize=3)
-        plt.semilogy()
+        ax_fc.set_yscale('log')
         ax_fc.set_ylabel('Flux Contrast',fontsize=11,fontweight='bold')
-        ax_fc.set_xlabel('Year',fontsize=11,fontweight='bold')
         ax_fc.set_ylim(1e-9,1e-7)
         ax_fc.grid(True,alpha=0.25,linestyle=':')
         ax_fc.legend(loc='best',fontsize=9,framealpha=0.9)
         ax_fc.tick_params(axis='both',which='major',labelsize=10)
 
-    # Add observation windows if available 
+    # Optional Plot: Integration Time
+    if plot_inttime:
+        ax_int=axes[inttime_idx]
+
+        # mask NaNs so fill_between leaves gaps
+        valid_mask_opt=np.isfinite(csv_data['integration_time_hours_opt_median'].values)
+        valid_mask_con=np.isfinite(csv_data['integration_time_hours_con_median'].values)
+
+        if np.any(valid_mask_opt) or np.any(valid_mask_con):
+
+            #OPTIMISTIC
+            if np.any(valid_mask_opt):
+                y_med=csv_data['integration_time_hours_opt_median'].values.copy()
+
+                # 68%
+                y16=csv_data['integration_time_hours_opt_16th'].values.copy()
+                y84=csv_data['integration_time_hours_opt_84th'].values.copy()
+
+                # 95%
+                y025=csv_data['integration_time_hours_opt_2.5th'].values.copy()
+                y975=csv_data['integration_time_hours_opt_97.5th'].values.copy()
+
+                # apply gaps
+                for arr in (y_med,y16,y84,y025,y975):
+                    arr[~valid_mask_opt]=np.nan
+
+                # plot 95% behind 68%
+                ax_int.fill_between(years,y025,y975,
+                                    color=c_opt,alpha=0.15,label='Optimistic 95% CI')
+                ax_int.fill_between(years,y16,y84,
+                                    color=c_opt,alpha=0.30,label='Optimistic 68% CI')
+                ax_int.plot(years,y_med,'-',color=c_opt,linewidth=2.5,
+                            label='Optimistic median',marker='o',markersize=3)
+
+            #CONSERVATIVE
+            if np.any(valid_mask_con):
+                y_med=csv_data['integration_time_hours_con_median'].values.copy()
+
+                # 68%
+                y16=csv_data['integration_time_hours_con_16th'].values.copy()
+                y84=csv_data['integration_time_hours_con_84th'].values.copy()
+
+                # 95%
+                y025=csv_data['integration_time_hours_con_2.5th'].values.copy()
+                y975=csv_data['integration_time_hours_con_97.5th'].values.copy()
+
+                for arr in (y_med,y16,y84,y025,y975):
+                    arr[~valid_mask_con]=np.nan
+
+                ax_int.fill_between(years,y025,y975,
+                                    color=c_con,alpha=0.15,label='Conservative 95% CI')
+                ax_int.fill_between(years,y16,y84,
+                                    color=c_con,alpha=0.30,label='Conservative 68% CI')
+                ax_int.plot(years,y_med,'-',color=c_con,linewidth=2.5,
+                            label='Conservative median',marker='o',markersize=3)
+
+            ax_int.set_ylabel('Integration Time (hours)',fontsize=11,fontweight='bold')
+            ax_int.set_yscale('log')
+
+            # sensible y-lims using medians
+            all_valid=[]
+            if np.any(valid_mask_opt):
+                all_valid.extend(csv_data['integration_time_hours_opt_median'].values[valid_mask_opt])
+            if np.any(valid_mask_con):
+                all_valid.extend(csv_data['integration_time_hours_con_median'].values[valid_mask_con])
+            if len(all_valid)>0:
+                min_val=np.nanmin(all_valid)
+                max_val=np.nanmax(all_valid)
+                ax_int.set_ylim(min_val*0.5,max_val*2.0)
+
+            ax_int.grid(True,alpha=0.25,linestyle=':')
+            ax_int.legend(loc='best',fontsize=9,framealpha=0.9)
+            ax_int.tick_params(axis='both',which='major',labelsize=10)
+
+        else:
+            ax_int.text(0.5,0.5,'No integration time data available',
+                        ha='center',va='center',transform=ax_int.transAxes,
+                        fontsize=12,color='gray')
+            ax_int.set_ylabel('Integration Time (hours)',fontsize=11,fontweight='bold')
+    # Add observation windows LAST (so they don't affect ylims)
     for a,ax in enumerate(axes):
-        ylims = ax.get_ylim()
-        
+        ylims=ax.get_ylim()
+
         if 'GB_not_observable' in csv_data.columns:
-            ax.fill_between(years,*ylims,where=~csv_data.GB_not_observable,
-                            alpha=0.2,edgecolor='None',color='orange',
-                            label='GB Observations')
-            if a==0: ax.legend(fontsize=9,framealpha=0.9)
+            label='GB Observations' if a==0 else ''
+            ax.fill_between(years,ylims[0],ylims[1],
+                            where=~csv_data.GB_not_observable,
+                            alpha=0.15,edgecolor='None',color='orange',
+                            label=label,zorder=0)
 
         if 'targ_observable' in csv_data.columns:
-            ax.fill_between(years,*ylims,where=~csv_data.targ_observable,
-                            alpha=0.2,edgecolor='None',color='k',
-                            label='Solar Keepout')
-            if a==0: ax.legend(fontsize=9,framealpha=0.9)
-        # Ensure all x-axes show the same range
+            label='Solar Keepout' if a==0 else ''
+            ax.fill_between(years,ylims[0],ylims[1],
+                            where=~csv_data.targ_observable,
+                            alpha=0.15,edgecolor='None',color='gray',
+                            label=label,zorder=0)
+
+        ax.set_ylim(ylims)
+
+        if a==0 and ('GB_not_observable' in csv_data.columns or
+                     'targ_observable' in csv_data.columns):
+            ax.legend(loc='best',fontsize=9,framealpha=0.9)
+
         ax.set_xlim(years[0],years[-1])
 
     axes[-1].set_xlabel('Year',fontsize=11,fontweight='bold')
@@ -1407,25 +1691,26 @@ def is_detectable(seps,fc,contrast_curve):
     - Make sure IWA and OWA are handled appropriately
     - Think about linear interpolation for v2
     """
-    seps = np.array(seps)
-    fc = np.array(fc)
+    seps=np.array(seps)
+    fc=np.array(fc)
 
     # get the position of the closest separation in the contrast curve for each given sep
-    concurve_seps = contrast_curve[0]
-    concurve_fcs = contrast_curve[1]
-    if seps.ndim == 1:
-        args = np.argmin(np.abs(seps[np.newaxis]-concurve_seps),axis=1)
-    elif seps.ndim == 2:
-        args = np.argmin(np.abs(seps[:,:,np.newaxis]-concurve_seps),axis=2)
+    concurve_seps=contrast_curve[0]
+    concurve_fcs=contrast_curve[1]
+    if seps.ndim==1:
+        args=np.argmin(np.abs(seps[np.newaxis]-concurve_seps),axis=1)
+    elif seps.ndim==2:
+        args=np.argmin(np.abs(seps[:,:,np.newaxis]-concurve_seps),axis=2)
     else:
         raise UserWarning('separation and flux contrast should be 1D or 2D array.')
-    limiting_fcs = concurve_fcs[args]
-    return fc >= limiting_fcs
+    limiting_fcs=concurve_fcs[args]
+    return fc>=limiting_fcs
 
 
 def main():
-    warnings.warn("Running this code via the .py script is outdated! Please reference the python notebooks for the latest workflow.")
-    
+    warnings.warn(
+        "Running this code via the .py script is outdated! Please reference the python notebooks for the latest workflow.")
+
     parser=argparse.ArgumentParser(
         description='Generate CSV files with projected angular separations for RV-detected exoplanets.'
     )
@@ -1460,12 +1745,10 @@ def main():
 
     args=parser.parse_args()
 
-    # Interactive prompts if arguments not provided
     print("="*60)
     print("Planet Separation CSV Generator")
     print("="*60)
 
-    # Planet selection
     if args.planet is None:
         print("Available planets:")
         for i,(key,name) in enumerate(orbit_params.items(),1):
@@ -1517,7 +1800,6 @@ def main():
                 print(f"  - Type a value with uncertainty (e.g., 90±5 or 90+/-5)")
                 args.inclination=input("Inclination [random]: ").strip() or "random"
 
-            # Validate the input
             try:
                 parse_inclination(args.inclination)
                 break
@@ -1542,7 +1824,6 @@ def main():
                 print(f"Error: nsamp must be a number or 'all'")
                 return
 
-    # Ask about plotting if not specified via command line
     if not args.plot:
         plot_input=input("Generate plots? (y/n) [n]: ").strip().lower()
         args.plot=plot_input in ['y','yes']
@@ -1553,19 +1834,6 @@ def main():
 
     inc_mode,inc_value,inc_uncertainty=parse_inclination(args.inclination)
     inc_params=[inc_value,inc_uncertainty]
-
-    # df_samples,csv_data=gen_summary_csv(args.planet,params,
-    #                                   args.posterior_dir,
-    #                                   output_dir,
-    #                                   args.start_date,
-    #                                   args.end_date,
-    #                                   args.time_interval,
-    #                                   inc_mode,
-    #                                   inc_params,
-    #                                   override_lan,
-    #                                   args.nsamp,
-    #                                   output,
-    #                                   args.plot)
 
 
 if __name__=="__main__":
