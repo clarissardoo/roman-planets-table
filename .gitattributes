@@ -2,3 +2,6 @@
 *.csv filter=lfs diff=lfs merge=lfs -text
 *.csv.bz2 filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text
+grid_model_files/*.npz filter=lfs diff=lfs merge=lfs -text
+grid_model_files/*.db filter=lfs diff=lfs merge=lfs -text
+grid_model_files/*.p filter=lfs diff=lfs merge=lfs -text

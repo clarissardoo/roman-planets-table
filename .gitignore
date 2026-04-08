@@ -1,6 +1,24 @@
-.env
-__pycache__/*.DS_Store
-.DS_Store
+# Data files (too large for git)
+*.npz
+*.pkl
+*.h5
+*.hdf5
+*.fits
+*.db
+*.p
+*.zip
+outputs/
+# Python
 __pycache__/
-*.csv
-*.png
+*.pyc
+*.egg-info/
+
+# Notebooks
+.ipynb_checkpoints/.DS_Store
+# Add to .gitignore — exceptions for grid_model_files
+echo '!grid_model_files/' >> .gitignore
+echo '!grid_model_files/**' >> .gitignore
+
+git add .gitignore
+git add grid_model_files/
+orbit_fits/eps_Eri_Thompson/
