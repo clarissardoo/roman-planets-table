@@ -22,3 +22,4 @@ echo '!grid_model_files/**' >> .gitignore
 git add .gitignore
 git add grid_model_files/
 orbit_fits/eps_Eri_Thompson/
+orbit_fits/eps_Eri_Thompson/
