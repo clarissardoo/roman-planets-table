@@ -11,6 +11,7 @@ from radvel.basis import Basis
 from radvel.utils import Msini
 from orbitize.basis import tp_to_tau, tau_to_tp
 from orbitize.kepler import calc_orbit
+from orbitize.system import radec2seppa
 
 
 # =====================================================================
@@ -38,6 +39,7 @@ orbit_params = {
     },
     "14_Her_b": {
         'star': '14_Her', 'pl_letter': 'b',
+        "basis": "per tc secosw sesinw k",
         "m0": 0.98, "m0_err": 0.04,
         "plx": 55.8657, "plx_err": 0.0291,
         "n_planets": 2, "pl_num": 1, "g_mag": 6.3830000,
@@ -769,6 +771,7 @@ def gen_summary_csv(planet, point_cloud, output_dir='.', output=None):
 
     labeled_data = {
         'separation_mas': point_cloud['sep_mas'],
+        'postion_angle_deg': radec2seppa(point_cloud['raoff_mas'], point_cloud['deoff_mas'])[1],
         'orbital_radius_au': point_cloud['orbital_radius_au'],
         'phase_angle_deg': point_cloud['phase_angle_deg'],
         'lambert_phase': lambert_phase,
